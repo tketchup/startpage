@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mikrofon erlauben</title>
+<style>
+  /* Gleiche Grundfarben wie die Startseite (Standard-Theme) */
+  :root { --bg: #111312; --surface: #1a1d1b; --border: #2a2e2b; --text: #e6ebe7;
+          --muted: #858f88; --accent: #e5fee2; --on-accent: #0f1a10; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 16px; box-sizing: border-box;
+    background: var(--bg); color: var(--text); font-family: system-ui, sans-serif;
+  }
+  main {
+    max-width: 420px; padding: 28px; text-align: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  }
+  h1 { margin: 0 0 10px; font-size: 20px; font-weight: 600; }
+  p { margin: 0 0 20px; color: var(--muted); line-height: 1.5; font-size: 14px; }
+  .buttons { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  button {
+    padding: 10px 18px; font: inherit; font-size: 14px; cursor: pointer;
+    border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--text);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Mikrofon für die Startseite erlauben</h1>
+  <p id="text">
+    Auf der Neuer-Tab-Seite kann Helium nicht nach dem Mikrofon fragen.
+    Erlaube es einmal hier, danach funktioniert die Spracheingabe im neuen Tab.
+    Die Spracherkennung läuft komplett lokal, es wird nichts hochgeladen.
+  </p>
+  <div class="buttons">
+    <button class="primary" id="allow" type="button">Mikrofon erlauben</button>
+    <button id="settings" type="button" hidden>Berechtigungen öffnen</button>
+    <button id="back" type="button">Zurück</button>
+  </div>
+</main>
+<script src="mic-permission.js"></script>
+</body>
+</html>

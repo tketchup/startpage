@@ -1,0 +1,10 @@
+# Werden von setup.sh heruntergeladen (groß bzw. fremde Lizenzen/Marken)
+extension/models/
+extension/vendor/
+extension/icons/apps/
+
+# Werden von build-extension.sh aus startpage.html erzeugt
+extension/newtab.html
+extension/newtab.js
+
+*.part

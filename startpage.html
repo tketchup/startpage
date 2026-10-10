@@ -1,0 +1,3162 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuer Tab</title>
+<style>
+  /* ==========================================================
+     Themes: alle Farben als Variablen, damit das Umschalten
+     nur das data-theme-Attribut am <html> ändern muss.
+     ========================================================== */
+  :root {
+    --bg: #111312;
+    --surface: #1a1d1b;
+    --surface-hover: #222623;
+    --border: #2a2e2b;
+    --text: #e6ebe7;
+    --muted: #858f88;
+    --accent: #E5FEE2;      /* sehr helles Mint */
+    --on-accent: #0f1a10;   /* dunkler Text auf Akzentflächen */
+    --tonal: #1a1d1b;       /* eingefärbte Fläche (Symbole, Chips) */
+    /* Uhr-Skins und Wetter-Widget; Material You setzt eigene Tonstufen */
+    --container: var(--surface);
+    --container-2: var(--surface-hover);
+    --tertiary: var(--accent);
+    --clock-hand: var(--text);
+    --clock-hand-2: var(--muted);
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --radius: 12px;
+  }
+
+  /* Material You: Farben berechnet applyTheme() aus der Grundfarbe,
+     hier stehen nur Schrift und Formen */
+  :root[data-theme="material"] {
+    --font: "Google Sans", "Google Sans Text", Roboto, system-ui, sans-serif;
+    --radius: 20px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    display: flex;
+    justify-content: center;
+    padding: 12vh 16px 48px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Hintergrundbild: liegt hinter allem. Die Sichtbarkeit ist seine Deckkraft
+     über der Hintergrundfarbe (wenig sichtbar = stärker abgedunkelt). */
+  .wallpaper {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: center / cover no-repeat;
+    pointer-events: none;
+  }
+  /* Schrift direkt auf dem Bild bleibt mit leichtem Schatten lesbar */
+  .has-wallpaper header,
+  .has-wallpaper .section-title,
+  .has-wallpaper .icon-name { text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
+
+  main {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+  }
+
+  [hidden] { display: none !important; }
+
+  /* ---------- Uhr, Datum, Wetter ---------- */
+  header { text-align: center; }
+
+  .clock {
+    font-size: clamp(56px, 12vw, 96px);
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    background: none;
+    border: 0;
+    color: var(--text);
+    font-family: inherit;
+    padding: 0;
+  }
+  .clock .sec { color: var(--muted); }
+
+  /* Uhr und Wetter-Widget nebeneinander (bricht auf schmalen Fenstern um) */
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px 28px;
+    flex-wrap: wrap;
+  }
+
+  /* ---------- Analoge Uhr-Skins (SVG, Mittelpunkt 0/0) ---------- */
+  .clock svg { display: block; width: clamp(150px, 28vw, 190px); height: auto; overflow: visible; }
+  .clock .face { fill: var(--container); }
+  .clock .tick { stroke: var(--muted); stroke-width: 1; }
+  .clock .tick.hour { stroke: var(--text); stroke-width: 3; stroke-linecap: round; }
+  .clock .hand { stroke: var(--clock-hand); stroke-linecap: round; }
+  .clock .pin { fill: var(--accent); }
+
+  /* Klassisch: dünne Zeiger, Striche, roter Faden als Sekundenzeiger */
+  .clock .classic .face { fill: var(--surface); stroke: var(--border); stroke-width: 2; }
+  .clock .classic .hand.hour { stroke-width: 6; }
+  .clock .classic .hand.minute { stroke-width: 4; }
+  .clock .classic .hand.second { stroke: var(--accent); stroke-width: 2; }
+
+  /* Material-Skins: dicke runde Zeiger, Sekunden als wandernder Punkt */
+  .clock .hand.bold.hour { stroke: var(--clock-hand); stroke-width: 16; }
+  .clock .hand.bold.minute { stroke: var(--clock-hand-2); stroke-width: 11; }
+  .clock .second-dot { fill: var(--tertiary); }
+
+  /* Welle: Rand um Zifferblatt und Zeiger */
+  .clock .wavy .face { stroke: var(--clock-hand-2); stroke-width: 10; stroke-linejoin: round; }
+  .clock .hand.outer { stroke: var(--clock-hand-2); stroke-width: 20; }
+  .clock .hand.inner { stroke: var(--clock-hand); stroke-width: 9; }
+  .clock .second-dot.ring { fill: var(--clock-hand); stroke: var(--clock-hand-2); stroke-width: 3; }
+
+  /* Ziffern 12 / 3 / 6 / 9 */
+  .clock .numeral {
+    fill: var(--accent);
+    font-family: var(--font);
+    font-size: 46px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+  /* Datum als Plakette bei 3 Uhr */
+  .clock .date-badge rect { fill: var(--accent); }
+  .clock .date-badge text {
+    fill: var(--on-accent);
+    font-family: var(--font);
+    font-size: 17px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+
+  /* ---------- Digitale Pillen-Uhren ---------- */
+  .pill-clock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--container);
+    color: var(--clock-hand);
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .pill-clock .pill-date { font-size: 14px; font-weight: 500; color: var(--clock-hand-2); }
+  .pill-clock .pill-sec { color: var(--clock-hand-2); }
+  .pill-clock.tall { width: 128px; height: 210px; gap: 6px; }
+  .pill-clock.tall .pill-time { display: flex; flex-direction: column; align-items: center; font-size: 64px; font-weight: 400; }
+  .pill-clock.tall .pill-sec { font-size: 22px; margin-top: 4px; }
+  .pill-clock.wide { width: 290px; height: 150px; gap: 8px; }
+  .pill-clock.wide .pill-time { font-size: 72px; font-weight: 400; letter-spacing: -0.02em; }
+  .pill-clock.wide .pill-sec { font-size: 30px; }
+
+  .meta {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 15px;
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  /* Wetter: Klick klappt die Details auf */
+  .weather {
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
+    margin: -3px -8px;
+    padding: 3px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .weather:hover, .weather:focus-visible, .weather[aria-expanded="true"] {
+    background: var(--surface);
+    outline: none;
+  }
+  .weather .temp { color: var(--text); }
+
+  .weather-details {
+    display: inline-grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 6px 28px;
+    margin-top: 14px;
+    padding: 12px 18px;
+    text-align: left;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-shadow: none;
+  }
+  .weather-details strong { color: var(--text); font-weight: 500; }
+  .weather-details .place { grid-column: 1 / -1; color: var(--text); }
+
+  /* ---------- Wetter-Widget (Material You) ----------
+     Abgerundete Karte: links eine organische Form mit Temperatur und
+     Wettersymbol, rechts ein Kreis (Höchst-/Tiefstwert, Ort) und eine
+     Pille mit dem nächsten Sonnenauf- oder -untergang. */
+  .weather-widget {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 0;
+    border-radius: 36px;
+    background: var(--container);
+    color: var(--clock-hand);
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+    transition: box-shadow .15s;
+  }
+  .weather-widget:hover, .weather-widget:focus-visible, .weather-widget[aria-expanded="true"] {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  .ww-blob {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 138px;
+    height: 128px;
+    background: var(--container-2);
+    /* Unregelmäßige Rundungen ergeben die "Kieselstein"-Form */
+    border-radius: 58% 42% 55% 45% / 48% 58% 42% 52%;
+    transform: rotate(-12deg);
+  }
+  .ww-temp { font-size: 40px; font-weight: 500; transform: rotate(12deg); }
+  .ww-icon {
+    position: absolute;
+    left: 4px;
+    bottom: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--tertiary);
+    font-size: 22px;
+    transform: rotate(12deg);
+  }
+  .ww-side { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .ww-circle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--clock-hand) 14%, var(--container));
+  }
+  .ww-circle strong { font-size: 15px; font-weight: 600; }
+  .ww-circle small {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--clock-hand-2);
+  }
+  .ww-pill {
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--clock-hand) 14%, var(--container));
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* Je nach Theme nur eine der beiden Wetter-Darstellungen */
+  :root:not([data-theme="material"]) #weather-widget,
+  :root[data-theme="material"] #weather { display: none !important; }
+
+  /* ---------- Suche ---------- */
+  .search { width: 100%; position: relative; }
+  .search input {
+    width: 100%;
+    padding: 14px 52px 14px 20px;
+    font: inherit;
+    font-size: 16px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .search input::placeholder { color: var(--muted); }
+  .search input:focus { border-color: var(--accent); }
+
+  /* Mikrofon-Knopf rechts in der Suchleiste */
+  .mic {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, background .15s;
+  }
+  .mic svg { width: 18px; height: 18px; }
+  .mic:hover, .mic:focus-visible { color: var(--text); outline: none; }
+  .mic.recording {
+    background: var(--accent);
+    color: var(--on-accent);
+    animation: mic-pulse 1.2s ease-out infinite;
+  }
+  .mic.busy { color: var(--accent); animation: mic-blink 1s ease-in-out infinite; }
+  @keyframes mic-pulse {
+    from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+    to   { box-shadow: 0 0 0 12px transparent; }
+  }
+  @keyframes mic-blink { 50% { opacity: .35; } }
+
+  /* ---------- Abschnitte ---------- */
+  section { width: 100%; }
+  .section-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    margin: 0 0 12px;
+    text-align: center;
+    font-weight: 500;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  /* ---------- Kacheln mit rundem Symbol (Schnellzugriffe und Twitch) ---------- */
+  .tile-wrap { position: relative; }
+
+  .icon-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 84px;
+    padding: 10px 4px;
+    border: 0;
+    border-radius: var(--radius);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .icon-tile:hover, .icon-tile:focus-visible { background: var(--surface); outline: none; }
+  .icon-tile:hover .avatar, .icon-tile:focus-visible .avatar { border-color: var(--accent); }
+
+  .avatar {
+    width: 52px;
+    height: 52px;
+    flex: none;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    object-fit: cover;
+    background: var(--surface);
+    transition: border-color .15s;
+  }
+  /* Automatische Website-Symbole sind oft klein: mit Rand statt formatfüllend */
+  .avatar.favicon { object-fit: contain; padding: 11px; }
+  /* Fallback-Kreis mit Anfangsbuchstabe */
+  .avatar.initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+    font-size: 20px;
+    text-transform: uppercase;
+  }
+  /* "+"-Kachel am Ende einer Reihe */
+  .avatar.plus {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-style: dashed;
+    background: none;
+    color: var(--muted);
+    font-size: 24px;
+    font-weight: 300;
+  }
+  .icon-name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .icon-tile.add .icon-name { color: var(--muted); }
+
+  /* Kleine Knöpfe zum Bearbeiten (✎) und Löschen (×), erscheinen beim Darüberfahren */
+  .tile-action {
+    position: absolute;
+    top: 4px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 13px;
+    line-height: 20px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  .tile-action.del { right: 10px; }
+  .tile-action.edit { left: 10px; font-size: 11px; }
+  .tile-wrap:hover .tile-action, .tile-action:focus-visible { opacity: 1; }
+
+  /* Formulare: Link hinzufügen/bearbeiten, Twitch-Kanal hinzufügen */
+  .add-form {
+    margin: 14px auto 0;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .add-form.dragover { border-color: var(--accent); border-style: dashed; }
+  .form-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .form-fields { flex: 1 1 200px; display: flex; flex-direction: column; gap: 8px; }
+  .add-form input[type="text"] {
+    flex: 1 1 140px;
+    min-width: 0;
+    padding: 9px 12px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    outline: none;
+  }
+  /* In der senkrechten Spalte würde flex-basis sonst als Höhe wirken */
+  .form-fields input[type="text"] { flex: none; }
+  .add-form input:focus { border-color: var(--accent); }
+  .form-hint { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn {
+    padding: 9px 16px;
+    font: inherit;
+    font-size: 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+  .btn.small { padding: 7px 12px; font-size: 13px; }
+
+  /* ---------- Lesezeichenleiste (nur in der Erweiterung) ---------- */
+  .bookmarks {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 4px 8px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    z-index: 10;
+  }
+  .bm {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 180px;
+    height: 26px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .bm:hover, .bm:focus-visible, .bm.open { background: var(--surface-hover); outline: none; }
+  .bm-label { overflow: hidden; text-overflow: ellipsis; }
+  .bm-icon { width: 16px; height: 16px; flex: none; }
+  .bm-icon.folder { color: var(--muted); }
+  .bm-spacer { flex: 1; }
+
+  /* Ausklappmenü für Ordner */
+  .bm-menu {
+    position: fixed;
+    min-width: 220px;
+    max-width: 320px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+    font-size: 13px;
+    z-index: 20;
+  }
+  .bm-menu .bm { display: flex; width: 100%; max-width: none; height: 30px; }
+  .bm-menu .bm-empty { padding: 6px 8px; color: var(--muted); }
+
+  /* ---------- Zahnrad und Einstellungsmenü ---------- */
+  .gear {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    opacity: .5;
+    transition: opacity .15s, transform .3s;
+  }
+  .gear svg { width: 18px; height: 18px; }
+  .gear:hover, .gear:focus-visible, .gear[aria-expanded="true"] { opacity: 1; outline: none; }
+  .gear[aria-expanded="true"] { transform: rotate(60deg); }
+
+  .settings {
+    position: fixed;
+    right: 16px;
+    bottom: 58px;
+    width: 290px;
+    max-width: calc(100vw - 32px);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+    font-size: 13px;
+    z-index: 20;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  /* Theme-Auswahl als zwei Segmente */
+  .segmented { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .segmented button {
+    padding: 5px 10px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+  }
+  .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+
+  /* Farbfeld-Knopf, öffnet den eigenen Farbwähler im Menü */
+  .swatch {
+    width: 40px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .swatch[aria-expanded="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Eigener Farbwähler (der des Systems öffnet sich außerhalb des Fensters) */
+  .picker { display: flex; flex-direction: column; gap: 10px; }
+  .picker-sv {
+    position: relative;
+    height: 130px;
+    border-radius: 6px;
+    cursor: crosshair;
+    touch-action: none;
+    /* Sättigung nach rechts, Helligkeit nach unten; Farbton kommt per JS */
+    background:
+      linear-gradient(to top, #000, transparent),
+      linear-gradient(to right, #fff, hsl(var(--hue, 0) 100% 50%));
+  }
+  .picker-handle {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .5);
+    pointer-events: none;
+  }
+  .picker-hue {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 12px;
+    margin: 0;
+    border-radius: 6px;
+    background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+    cursor: pointer;
+  }
+  .picker-hue::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .5);
+  }
+  .picker-hex {
+    padding: 6px 8px;
+    font: inherit;
+    font-family: ui-monospace, monospace;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+  }
+  .picker-hex:focus { border-color: var(--accent); }
+
+  .link-btn {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .link-btn:hover { color: var(--text); }
+  .settings .btn { width: 100%; font-size: 13px; }
+  .settings { max-height: calc(100vh - 80px); overflow-y: auto; }
+  .settings > * { flex-shrink: 0; }   /* lieber scrollen als stauchen */
+  .settings hr { width: 100%; margin: 0; border: 0; border-top: 1px solid var(--border); }
+  .settings-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+  }
+
+  /* Kleine Knöpfe in einer Zeile nicht auf volle Breite ziehen */
+  .settings .settings-row .btn { width: auto; flex: none; }
+  .settings-input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+  }
+  .settings-input:focus { border-color: var(--accent); }
+  .settings .form-hint { margin: -4px 0 0; }
+
+  /* Schieberegler (Sichtbarkeit des Hintergrundbilds) */
+  .range { flex: 1; max-width: 140px; accent-color: var(--accent); cursor: pointer; }
+
+  /* Trefferliste der Ortssuche */
+  .place-results { display: flex; flex-direction: column; gap: 2px; margin-top: -4px; }
+  .place-results button {
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .place-results button:hover, .place-results button:focus-visible {
+    background: var(--surface-hover);
+    outline: none;
+  }
+  .place-results small { color: var(--muted); }
+
+  /* Ein/Aus-Schalter */
+  .switch {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    flex: none;
+    width: 32px;
+    height: 18px;
+    margin: 0;
+    border-radius: 9px;
+    background: var(--border);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text);
+    transition: transform .15s;
+  }
+  .switch:checked { background: var(--accent); }
+  .switch:checked::after { transform: translateX(14px); background: var(--on-accent); }
+  .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Auswahlliste (Uhr-Stil in den Schnelleinstellungen) */
+  .settings-select {
+    padding: 5px 8px;
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+  }
+  .settings-select:focus { border-color: var(--accent); }
+
+  /* ---------- Einstellungsfenster ---------- */
+  .settings-dialog {
+    width: min(660px, calc(100vw - 32px));
+    height: min(520px, calc(100vh - 32px));
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, .5);
+  }
+  .settings-dialog[open] { display: flex; flex-direction: column; }
+  .settings-dialog::backdrop { background: rgba(0, 0, 0, .55); }
+  .dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .dialog-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+  .dialog-close {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--muted);
+    font-size: 22px;
+    cursor: pointer;
+  }
+  .dialog-close:hover, .dialog-close:focus-visible { background: var(--surface-hover); color: var(--text); outline: none; }
+  .dialog-body { flex: 1; min-height: 0; display: flex; }
+  .dialog-tabs {
+    flex: none;
+    width: 150px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-right: 1px solid var(--border);
+  }
+  .dialog-tabs button {
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .dialog-tabs button:hover, .dialog-tabs button:focus-visible { background: var(--surface-hover); color: var(--text); outline: none; }
+  .dialog-tabs button[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
+  .dialog-panels { flex: 1; min-width: 0; overflow-y: auto; padding: 18px; }
+  .dialog-panel { display: flex; flex-direction: column; gap: 14px; }
+  .dialog-panel > * { flex-shrink: 0; }
+  .dialog-panel .btn { align-self: flex-start; font-size: 13px; }
+  .dialog-panel .form-hint { margin: 0; }
+
+  /* Auswahl der Uhr-Skins mit kleiner Vorschau */
+  .skin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+  .skin-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: 132px;
+    padding: 10px 6px 8px;
+    border: 2px solid transparent;
+    border-radius: 14px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .skin-option:hover, .skin-option:focus-visible { border-color: var(--border); outline: none; }
+  .skin-option[aria-pressed="true"] { border-color: var(--accent); }
+  .skin-preview {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    zoom: .42;   /* Vorschau in Originalgröße gebaut, hier verkleinert */
+    pointer-events: none;
+  }
+  .skin-preview svg { width: 190px; }
+
+  @media (max-width: 560px) {
+    .dialog-body { flex-direction: column; }
+    .dialog-tabs { width: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+    .dialog-tabs button { white-space: nowrap; }
+  }
+
+  /* ---------- Apps-Menü oben rechts ---------- */
+  .apps-toggle {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    z-index: 15;
+    transition: background .15s, color .15s;
+  }
+  .apps-toggle svg { width: 20px; height: 20px; }
+  .apps-toggle:hover, .apps-toggle:focus-visible, .apps-toggle[aria-expanded="true"] {
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+  }
+  .apps-menu {
+    position: fixed;
+    top: 58px;
+    right: 16px;
+    width: 316px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+    z-index: 20;
+  }
+  .app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 4px;
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 12px;
+    text-decoration: none;
+  }
+  .app:hover, .app:focus-visible { background: var(--surface-hover); outline: none; }
+  .app img, .app .initial { width: 40px; height: 40px; }
+  .app img { object-fit: contain; }
+  .app .initial { font-size: 16px; }
+  .app span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Unter die Lesezeichenleiste rücken, wenn sie angezeigt wird */
+  .has-bookmarks:not(.hide-bookmarks) .apps-toggle { top: 46px; }
+  .has-bookmarks:not(.hide-bookmarks) .apps-menu { top: 92px; }
+
+  /* Bereiche, die im Menü ausgeschaltet wurden */
+  .hide-bookmarks #bookmarks,
+  .hide-weather #weather,
+  .hide-weather #weather-details,
+  .hide-weather #weather-widget,
+  .hide-apps #apps-toggle,
+  .hide-apps #apps-menu,
+  .hide-links #links-section,
+  .hide-twitch #twitch-section,
+  .hide-mic #mic { display: none !important; }
+
+  /* ---------- Material You: Formen und Flächen ----------
+     Große Rundungen, randlose Flächen, Pillen-Knöpfe, eingefärbte Container */
+  :root[data-theme="material"] .clock { font-weight: 400; }
+  :root[data-theme="material"] .search input {
+    height: 56px;
+    border: 0;
+    border-radius: 28px;
+    background: var(--surface-hover);
+  }
+  :root[data-theme="material"] .search input:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+  :root[data-theme="material"] .weather { border-radius: 16px; background: var(--tonal); }
+  :root[data-theme="material"] .weather-details,
+  :root[data-theme="material"] .add-form,
+  :root[data-theme="material"] .settings,
+  :root[data-theme="material"] .bm-menu { border: 0; border-radius: 28px; background: var(--surface); }
+  :root[data-theme="material"] .settings { padding: 20px; }
+  :root[data-theme="material"] .avatar { border: 0; background: var(--tonal); }
+  :root[data-theme="material"] .avatar.plus { border: 2px dashed var(--border); background: none; }
+  :root[data-theme="material"] .icon-tile:hover,
+  :root[data-theme="material"] .icon-tile:focus-visible {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+  :root[data-theme="material"] .icon-tile:hover .avatar { box-shadow: 0 0 0 3px var(--accent); }
+  :root[data-theme="material"] .btn { border: 0; border-radius: 20px; background: var(--tonal); }
+  :root[data-theme="material"] .btn.primary { background: var(--accent); }
+  :root[data-theme="material"] .add-form input[type="text"],
+  :root[data-theme="material"] .settings-input,
+  :root[data-theme="material"] .picker-hex { border: 0; border-radius: 12px; background: var(--surface-hover); }
+  :root[data-theme="material"] .segmented { border: 0; border-radius: 20px; background: var(--surface-hover); }
+  :root[data-theme="material"] .bookmarks { border-bottom: 0; background: var(--surface); }
+  :root[data-theme="material"] .bm { border-radius: 16px; }
+  :root[data-theme="material"] .gear { opacity: .8; }
+  :root[data-theme="material"] .settings-dialog,
+  :root[data-theme="material"] .apps-menu { border: 0; border-radius: 28px; }
+  :root[data-theme="material"] .dialog-head,
+  :root[data-theme="material"] .dialog-tabs { border-color: transparent; }
+  :root[data-theme="material"] .dialog-tabs button,
+  :root[data-theme="material"] .app,
+  :root[data-theme="material"] .skin-option { border-radius: 20px; }
+  :root[data-theme="material"] .settings-select { border: 0; border-radius: 12px; background: var(--surface-hover); }
+  :root[data-theme="material"] .apps-toggle { background: var(--surface); }
+
+  @media (max-width: 480px) {
+    body { padding-top: 8vh; }
+    main { gap: 32px; }
+  }
+</style>
+</head>
+<body>
+<!-- Optionales Hintergrundbild (im Einstellungsmenü wählbar) -->
+<div class="wallpaper" id="wallpaper" hidden></div>
+<!-- Lesezeichenleiste: wird nur in der Erweiterung befüllt (file:// hat keinen Zugriff) -->
+<nav class="bookmarks" id="bookmarks" aria-label="Lesezeichen" hidden></nav>
+
+<main>
+  <header>
+    <div class="header-row">
+      <button class="clock" id="clock" type="button" title="Sekunden ein-/ausblenden">--:--</button>
+      <!-- Wetter-Widget im Material-You-Stil (nur bei Material You sichtbar) -->
+      <button class="weather-widget" id="weather-widget" type="button" title="Wetterdetails"
+              aria-expanded="false" aria-controls="weather-details" hidden>
+        <span class="ww-blob">
+          <span class="ww-temp" id="ww-temp"></span>
+          <span class="ww-icon" id="ww-icon"></span>
+        </span>
+        <span class="ww-side">
+          <span class="ww-circle">
+            <strong id="ww-range"></strong>
+            <small id="ww-place"></small>
+          </span>
+          <span class="ww-pill" id="ww-sun"></span>
+        </span>
+      </button>
+    </div>
+    <div class="meta">
+      <span id="date"></span>
+      <button class="weather" id="weather" type="button" title="Wetterdetails"
+              aria-expanded="false" aria-controls="weather-details" hidden>
+        <span id="weather-icon"></span>
+        <span class="temp" id="weather-temp"></span>
+        <span id="weather-range"></span>
+      </button>
+    </div>
+    <!-- Wetterdetails: per Klick aufs Wetter ein- und ausklappen -->
+    <div class="weather-details" id="weather-details" hidden></div>
+  </header>
+
+  <form class="search" id="search" role="search">
+    <input id="search-input" type="search" name="q" placeholder="Google durchsuchen …"
+           autocomplete="off" autofocus aria-label="Suche">
+    <!-- Spracheingabe: nur in der Erweiterung verfügbar -->
+    <button class="mic" id="mic" type="button" title="Spracheingabe" aria-label="Spracheingabe" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="2" width="6" height="12" rx="3"/>
+        <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>
+      </svg>
+    </button>
+  </form>
+
+  <section id="links-section" aria-label="Schnellzugriff">
+    <div class="row" id="links"></div>
+    <!-- Link hinzufügen oder bearbeiten -->
+    <form class="add-form" id="link-form" hidden>
+      <div class="form-row">
+        <div id="link-preview"></div>
+        <div class="form-fields">
+          <input id="link-name" type="text" placeholder="Name" aria-label="Name">
+          <input id="link-url" type="text" placeholder="example.com" aria-label="URL" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <input id="link-icon-url" type="text" placeholder="Bild-URL (optional)" aria-label="Bild-URL">
+        <button class="btn small" type="button" id="link-icon-pick">Datei …</button>
+        <button class="btn small" type="button" id="link-icon-clear"
+                title="Website-Symbol automatisch laden">Automatisch</button>
+        <input id="link-icon-file" type="file" accept="image/*" hidden>
+      </div>
+      <p class="form-hint" id="link-hint"></p>
+      <div class="form-actions">
+        <button class="btn" type="button" id="link-cancel">Abbrechen</button>
+        <button class="btn primary" type="submit" id="link-submit">Hinzufügen</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="twitch-section" aria-label="Twitch">
+    <h2 class="section-title">Twitch</h2>
+    <div class="row" id="twitch"></div>
+    <!-- Twitch-Kanal hinzufügen -->
+    <form class="add-form" id="channel-form" hidden>
+      <div class="form-row">
+        <input id="channel-name" type="text" placeholder="Kanalname oder twitch.tv-Link"
+               aria-label="Twitch-Kanal">
+      </div>
+      <p class="form-hint" id="channel-hint" hidden></p>
+      <div class="form-actions">
+        <button class="btn" type="button" id="channel-cancel">Abbrechen</button>
+        <button class="btn primary" type="submit">Hinzufügen</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<!-- Einstellungen: Zahnrad unten rechts -->
+<button class="gear" id="settings-toggle" type="button" title="Einstellungen"
+        aria-label="Einstellungen" aria-expanded="false" aria-controls="settings">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  </svg>
+</button>
+
+<!-- Schnelleinstellungen (Zahnrad): nur die wichtigsten Regler -->
+<div class="settings" id="settings" role="dialog" aria-label="Schnelleinstellungen" hidden>
+  <div class="settings-row">
+    <span>Theme</span>
+    <div class="segmented">
+      <button type="button" data-theme-choice="default">Standard</button>
+      <button type="button" data-theme-choice="material">Material You</button>
+    </div>
+  </div>
+  <label class="settings-row">
+    <span>Uhr</span>
+    <select class="settings-select" id="clock-select" aria-label="Uhr-Stil"></select>
+  </label>
+  <label class="settings-row" data-wallpaper-only hidden>
+    <span>Hintergrundbild</span>
+    <input class="range" type="range" min="5" max="100" step="1" data-wallpaper-visibility
+           aria-label="Sichtbarkeit des Hintergrundbilds">
+  </label>
+  <button class="btn" id="open-settings-dialog" type="button">Weitere Einstellungen …</button>
+</div>
+
+<!-- Alle Einstellungen in einem Fenster mit Reitern -->
+<dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-dialog-title">
+  <div class="dialog-head">
+    <h2 id="settings-dialog-title">Einstellungen</h2>
+    <button class="dialog-close" id="settings-dialog-close" type="button" aria-label="Schließen">×</button>
+  </div>
+  <div class="dialog-body">
+    <nav class="dialog-tabs" role="tablist" aria-label="Bereiche">
+      <button type="button" role="tab" data-tab="design" aria-selected="true">Design</button>
+      <button type="button" role="tab" data-tab="clock" aria-selected="false">Uhr</button>
+      <button type="button" role="tab" data-tab="wallpaper" aria-selected="false">Hintergrund</button>
+      <button type="button" role="tab" data-tab="weather" aria-selected="false">Wetter</button>
+      <button type="button" role="tab" data-tab="sections" aria-selected="false">Anzeigen</button>
+      <button type="button" role="tab" data-tab="browser" aria-selected="false" data-extension-only>Browser</button>
+    </nav>
+
+    <div class="dialog-panels">
+      <!-- Design: Theme und Farben -->
+      <section class="dialog-panel" data-panel="design" role="tabpanel">
+        <div class="settings-row">
+          <span>Theme</span>
+          <div class="segmented">
+            <button type="button" data-theme-choice="default">Standard</button>
+            <button type="button" data-theme-choice="material">Material You</button>
+          </div>
+        </div>
+        <!-- Bei Material You wird der Hintergrund aus der Grundfarbe berechnet -->
+        <div class="settings-row" id="bg-color-row">
+          <span>Hintergrundfarbe</span>
+          <button class="swatch" type="button" data-color-target="bg"
+                  aria-label="Hintergrundfarbe wählen" aria-expanded="false"></button>
+        </div>
+        <div class="settings-row">
+          <span id="accent-label">Akzentfarbe</span>
+          <button class="swatch" type="button" data-color-target="accent"
+                  aria-label="Akzentfarbe wählen" aria-expanded="false"></button>
+        </div>
+        <!-- Farbwähler: wird unter die gerade gewählte Farbzeile verschoben -->
+        <div class="picker" id="picker" hidden>
+          <div class="picker-sv" id="picker-sv"><div class="picker-handle" id="picker-handle"></div></div>
+          <input class="picker-hue" id="picker-hue" type="range" min="0" max="359" step="1" aria-label="Farbton">
+          <input class="picker-hex" id="picker-hex" type="text" maxlength="7" spellcheck="false"
+                 autocomplete="off" aria-label="Farbwert (Hex)">
+        </div>
+        <button class="link-btn" id="color-reset" type="button">Farben zurücksetzen</button>
+      </section>
+
+      <!-- Uhr: Auswahl der Skins mit Vorschau -->
+      <section class="dialog-panel" data-panel="clock" role="tabpanel" hidden>
+        <p class="form-hint">Ein Klick auf die Uhr blendet die Sekunden ein oder aus.</p>
+        <div class="skin-grid" id="skin-grid"></div>
+      </section>
+
+      <!-- Hintergrundbild: Bild-URL oder Datei vom PC -->
+      <section class="dialog-panel" data-panel="wallpaper" role="tabpanel" hidden>
+        <form class="settings-row" id="wallpaper-form">
+          <input class="settings-input" id="wallpaper-url" type="text" placeholder="Bild-URL"
+                 aria-label="Bild-URL für den Hintergrund">
+          <button class="btn small" type="button" id="wallpaper-pick">Datei …</button>
+          <input id="wallpaper-file" type="file" accept="image/*" hidden>
+        </form>
+        <label class="settings-row" data-wallpaper-only hidden>
+          <span>Sichtbarkeit</span>
+          <input class="range" type="range" min="5" max="100" step="1" data-wallpaper-visibility
+                 aria-label="Sichtbarkeit des Hintergrundbilds">
+        </label>
+        <button class="link-btn" id="wallpaper-remove" type="button" data-wallpaper-only hidden>Bild entfernen</button>
+        <p class="form-hint" id="wallpaper-hint" hidden></p>
+      </section>
+
+      <!-- Wetter-Ort über die Ortssuche von Open-Meteo -->
+      <section class="dialog-panel" data-panel="weather" role="tabpanel" hidden>
+        <form class="settings-row" id="place-form">
+          <input class="settings-input" id="place-input" type="text" placeholder="z. B. Hamburg"
+                 aria-label="Ort suchen">
+          <button class="btn small" type="submit">Suchen</button>
+        </form>
+        <div class="place-results" id="place-results" hidden></div>
+        <p class="form-hint" id="place-hint"></p>
+      </section>
+
+      <!-- Bereiche ein- und ausschalten -->
+      <section class="dialog-panel" data-panel="sections" role="tabpanel" hidden>
+        <label class="settings-row" data-extension-only>
+          <span>Lesezeichenleiste</span>
+          <input class="switch" type="checkbox" data-section="bookmarks">
+        </label>
+        <label class="settings-row">
+          <span>Apps-Menü (oben rechts)</span>
+          <input class="switch" type="checkbox" data-section="apps">
+        </label>
+        <label class="settings-row">
+          <span>Wetter</span>
+          <input class="switch" type="checkbox" data-section="weather">
+        </label>
+        <label class="settings-row">
+          <span>Schnellzugriffe</span>
+          <input class="switch" type="checkbox" data-section="links">
+        </label>
+        <label class="settings-row">
+          <span>Twitch</span>
+          <input class="switch" type="checkbox" data-section="twitch">
+        </label>
+        <label class="settings-row" data-extension-only>
+          <span>Mikrofon</span>
+          <input class="switch" type="checkbox" data-section="mic">
+        </label>
+      </section>
+
+      <!-- Nur in der Erweiterung: normale Seiten dürfen chrome:// nicht öffnen -->
+      <section class="dialog-panel" data-panel="browser" role="tabpanel" hidden>
+        <button class="btn" id="open-site-permissions" type="button">Berechtigungen (Mikrofon)</button>
+        <button class="btn" id="open-browser-settings" type="button">Browser-Einstellungen öffnen</button>
+      </section>
+    </div>
+  </div>
+</dialog>
+
+<!-- Apps-Menü oben rechts (im Einstellungsfenster abschaltbar) -->
+<button class="apps-toggle" id="apps-toggle" type="button" title="Apps" aria-label="Apps"
+        aria-expanded="false" aria-controls="apps-menu">
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/>
+    <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+    <circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+  </svg>
+</button>
+<div class="apps-menu" id="apps-menu" aria-label="Apps" hidden></div>
+
+<script>
+/* ============================================================
+   KONFIGURATION: hier einfach Links und Kanäle anpassen
+   ============================================================ */
+
+// Startwerte für die Schnellzugriffe. Sie werden nur beim allerersten
+// Laden übernommen; danach zählt der in localStorage gespeicherte Stand.
+const DEFAULT_LINKS = [
+  { name: 'YouTube',   url: 'https://www.youtube.com' },
+  { name: 'Gmail',     url: 'https://mail.google.com' },
+  { name: 'GitHub',    url: 'https://github.com' },
+  { name: 'Wikipedia', url: 'https://de.wikipedia.org' },
+  { name: 'Reddit',    url: 'https://www.reddit.com' },
+];
+
+// Startwerte für die Twitch-Kanäle (Kanalname wie in der URL). Auch sie
+// gelten nur beim allerersten Laden; danach über "+" und "×" verwalten.
+const TWITCH_CHANNELS = ['kaicenat', 'ibai', 'ninja'];
+
+// Apps-Menü oben rechts. icon: Dateiname in extension/icons/apps/ (lokal,
+// ohne Netzwerkanfrage). Ohne icon wird das Website-Symbol geladen.
+const APPS = [
+  { name: 'Google',         url: 'https://www.google.com',                    icon: 'google' },
+  { name: 'Gmail',          url: 'https://mail.google.com',                   icon: 'gmail' },
+  { name: 'Drive',          url: 'https://drive.google.com',                  icon: 'drive' },
+  { name: 'Fotos',          url: 'https://photos.google.com',                 icon: 'photos' },
+  { name: 'Kalender',       url: 'https://calendar.google.com',               icon: 'calendar' },
+  { name: 'Übersetzer',     url: 'https://translate.google.com',              icon: 'translate' },
+  { name: 'Maps',           url: 'https://maps.google.com',                   icon: 'maps' },
+  { name: 'YouTube',        url: 'https://www.youtube.com',                   icon: 'youtube' },
+  { name: 'Gemini',         url: 'https://gemini.google.com',                 icon: 'gemini' },
+  { name: 'Docs',           url: 'https://docs.google.com/document',          icon: 'docs' },
+  { name: 'Tabellen',       url: 'https://docs.google.com/spreadsheets',      icon: 'sheets' },
+  { name: 'Präsentationen', url: 'https://docs.google.com/presentation',      icon: 'slides' },
+  { name: 'Keep',           url: 'https://keep.google.com',                   icon: 'keep' },
+  { name: 'Meet',           url: 'https://meet.google.com',                   icon: 'meet' },
+  { name: 'News',           url: 'https://news.google.com',                   icon: 'news' },
+  { name: 'Kontakte',       url: 'https://contacts.google.com',               icon: 'contacts' },
+];
+
+// Standard-Ort fürs Wetter; im Einstellungsmenü änderbar
+const DEFAULT_PLACE = { name: 'Berlin', detail: 'Berlin, Deutschland', latitude: 52.52, longitude: 13.41 };
+
+// Standardfarben je Theme. "default" muss zu den CSS-Variablen oben passen;
+// bei Material You ist accent die Grundfarbe, aus der alles berechnet wird.
+const THEME_COLORS = {
+  default:  { bg: '#111312', accent: '#e5fee2' },
+  material: { accent: '#3b8f5a' },
+};
+const THEMES = Object.keys(THEME_COLORS);
+
+// Schlüssel für localStorage
+const KEYS = {
+  links:          'startpage.links',
+  channels:       'startpage.channels',
+  seconds:        'startpage.showSeconds',
+  clockStyle:     'startpage.clockStyle',
+  theme:          'startpage.theme',
+  colors:         'startpage.colors',
+  sections:       'startpage.sections',
+  wallpaper:      'startpage.wallpaper',
+  place:          'startpage.weatherPlace',
+  weatherDetails: 'startpage.weatherDetails',
+};
+
+// Bereiche, die sich im Einstellungsmenü ein- und ausschalten lassen
+const DEFAULT_SECTIONS = { bookmarks: true, apps: true, weather: true, links: true, twitch: true, mic: true };
+
+// Läuft die Seite als Erweiterung (neuer Tab) oder als normale file://-Datei?
+const IS_EXTENSION = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+
+// Lokale Bilder liegen im Erweiterungsordner; die file://-Version liegt eine Ebene höher
+const ASSET_BASE = IS_EXTENSION ? '' : 'extension/';
+
+
+/* ============================================================
+   Speicher-Helfer: jeder Zugriff in try/catch, damit die Seite
+   auch ohne localStorage (z. B. blockiert) funktioniert.
+   ============================================================ */
+const store = {
+  get(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* Speicher nicht verfügbar: Änderung gilt nur bis zum Neuladen */
+    }
+  },
+};
+
+
+/* ============================================================
+   Theme und eigene Farben
+   Eigene Farben werden pro Theme gespeichert. Aus Hintergrund und
+   Akzent (bzw. bei Material You aus der Grundfarbe) werden alle
+   übrigen Farben (Flächen, Text, Rahmen) berechnet.
+   ============================================================ */
+const root = document.documentElement;
+
+// Unbekannte Werte (z. B. das frühere Hacker-Theme) fallen auf Standard zurück
+let currentTheme = store.get(KEYS.theme, 'default');
+if (!THEMES.includes(currentTheme)) currentTheme = 'default';
+let customColors = store.get(KEYS.colors, {}) || {};
+
+// --- Farb-Helfer ---
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbToHex(rgb) {
+  return '#' + rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('');
+}
+// Mischt Farbe a mit Farbe b (t = 0 → a, t = 1 → b)
+function mix(a, b, t) {
+  const ra = hexToRgb(a), rb = hexToRgb(b);
+  return rgbToHex(ra.map((c, i) => c + (rb[i] - c) * t));
+}
+// Relative Helligkeit nach WCAG (0 = schwarz, 1 = weiß)
+function luminance(hex) {
+  const [r, g, b] = hexToRgb(hex).map((c) => {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function hexToHsl(hex) {
+  const [r, g, b] = hexToRgb(hex).map((c) => c / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  let h;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return [(h * 60 + 360) % 360, s, l];
+}
+function hslToHex(h, s, l) {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return rgbToHex([f(0), f(8), f(4)].map((c) => c * 255));
+}
+
+const COLOR_VARS = ['--bg', '--surface', '--surface-hover', '--border', '--tonal',
+                    '--text', '--muted', '--accent', '--on-accent',
+                    '--container', '--container-2', '--tertiary', '--clock-hand', '--clock-hand-2'];
+
+// Material You (dunkles Schema): alle Farben sind Helligkeitsstufen der
+// Grundfarbe, angelehnt an die Tonpaletten von Material 3
+// (fast schwarze Flächen, helle Primärfarbe, dunkler Text darauf).
+function applyMaterialColors(seed) {
+  const [h, s] = hexToHsl(seed);
+  const chroma = Math.min(Math.max(s, 0.35), 0.75);   // blasse Farben trotzdem erkennbar
+  const tone = (sat, light) => hslToHex(h, sat, light);
+  const set = (name, value) => root.style.setProperty(name, value);
+  set('--bg', tone(0.14, 0.07));
+  set('--surface', tone(0.16, 0.115));
+  set('--surface-hover', tone(0.17, 0.16));
+  set('--border', tone(0.12, 0.30));
+  set('--tonal', tone(0.30, 0.22));
+  set('--text', tone(0.20, 0.90));
+  set('--muted', tone(0.12, 0.72));
+  set('--accent', tone(chroma, 0.78));
+  set('--on-accent', tone(chroma, 0.18));
+  // Widgets: dunkle eingefärbte Flächen, helle Zeiger, dritte Farbe (Farbton +60°)
+  set('--container', tone(chroma * 0.45, 0.17));
+  set('--container-2', tone(chroma * 0.6, 0.28));
+  set('--clock-hand', tone(chroma, 0.86));
+  set('--clock-hand-2', tone(chroma * 0.8, 0.66));
+  set('--tertiary', hslToHex((h + 60) % 360, 0.75, 0.70));
+}
+
+function applyTheme() {
+  if (currentTheme === 'default') delete root.dataset.theme;
+  else root.dataset.theme = currentTheme;
+
+  // Ohne eigene Farben gelten die Werte aus dem CSS
+  COLOR_VARS.forEach((name) => root.style.removeProperty(name));
+
+  if (currentTheme === 'material') {
+    applyMaterialColors(activeColors().accent);
+    return;
+  }
+
+  const custom = customColors[currentTheme];
+  if (!custom) return;
+
+  const { bg, accent } = custom;
+  // Text hell auf dunklem Hintergrund und umgekehrt
+  const text = luminance(bg) < 0.4 ? '#e6ebe7' : '#16181a';
+
+  root.style.setProperty('--bg', bg);
+  root.style.setProperty('--tonal', mix(bg, text, 0.05));
+  root.style.setProperty('--surface', mix(bg, text, 0.05));
+  root.style.setProperty('--surface-hover', mix(bg, text, 0.09));
+  root.style.setProperty('--border', mix(bg, text, 0.14));
+  root.style.setProperty('--text', text);
+  root.style.setProperty('--muted', mix(bg, text, 0.55));
+  root.style.setProperty('--accent', accent);
+  // Dunkler Text auf hellen Akzentflächen, heller auf dunklen
+  root.style.setProperty('--on-accent', luminance(accent) > 0.35 ? '#0f1a10' : '#ffffff');
+}
+
+// Aktuell gültige Farben (eigene oder Standard) des aktiven Themes
+function activeColors() {
+  return { ...THEME_COLORS[currentTheme], ...customColors[currentTheme] };
+}
+
+applyTheme();
+
+
+/* ============================================================
+   Einstellungsmenü (Zahnrad unten rechts)
+   ============================================================ */
+const settingsToggle = document.getElementById('settings-toggle');
+const settingsPanel = document.getElementById('settings');
+const settingsDialog = document.getElementById('settings-dialog');
+// Theme-Auswahl gibt es in den Schnelleinstellungen und im Fenster
+const themeButtons = document.querySelectorAll('[data-theme-choice]');
+const swatches = document.querySelectorAll('[data-color-target]');
+
+// Bedienelemente auf den aktuellen Stand bringen
+function syncSettings() {
+  const colors = activeColors();
+  const material = currentTheme === 'material';
+  swatches.forEach((swatch) => {
+    swatch.style.background = colors[swatch.dataset.colorTarget];
+  });
+  themeButtons.forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.themeChoice === currentTheme));
+  });
+  // Material You berechnet den Hintergrund selbst aus der Grundfarbe
+  document.getElementById('bg-color-row').hidden = material;
+  document.getElementById('accent-label').textContent = material ? 'Grundfarbe' : 'Akzentfarbe';
+  if (material && pickerTarget === 'bg') closePicker();
+  syncClockControls();
+  if (!picker.hidden) syncPicker();
+}
+
+// Schnelleinstellungen am Zahnrad
+function toggleSettings(open) {
+  const show = typeof open === 'boolean' ? open : settingsPanel.hidden;
+  settingsPanel.hidden = !show;
+  settingsToggle.setAttribute('aria-expanded', String(show));
+  if (show) syncSettings();
+}
+
+settingsToggle.addEventListener('click', (event) => {
+  event.stopPropagation();
+  toggleSettings();
+});
+settingsPanel.addEventListener('click', (event) => event.stopPropagation());
+document.addEventListener('click', () => toggleSettings(false));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !settingsPanel.hidden) {
+    toggleSettings(false);
+    settingsToggle.focus();
+  }
+});
+
+themeButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    currentTheme = button.dataset.themeChoice;
+    store.set(KEYS.theme, currentTheme);
+    applyTheme();
+    syncSettings();
+  });
+});
+
+/* ---------- Einstellungsfenster mit Reitern ---------- */
+const dialogTabs = settingsDialog.querySelectorAll('[data-tab]');
+const dialogPanels = settingsDialog.querySelectorAll('[data-panel]');
+
+function showTab(name) {
+  dialogTabs.forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.tab === name)));
+  dialogPanels.forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
+}
+dialogTabs.forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
+
+document.getElementById('open-settings-dialog').addEventListener('click', () => {
+  toggleSettings(false);
+  syncSettings();
+  settingsDialog.showModal();
+});
+document.getElementById('settings-dialog-close').addEventListener('click', () => settingsDialog.close());
+// Klick auf den abgedunkelten Rand schließt das Fenster
+settingsDialog.addEventListener('click', (event) => {
+  if (event.target === settingsDialog) settingsDialog.close();
+});
+settingsDialog.addEventListener('close', () => closePicker());
+
+/* ---------- Eigener Farbwähler ----------
+   Farbfläche (Sättigung/Helligkeit), Farbton-Regler und Hex-Feld.
+   Arbeitet intern mit HSV, damit der Farbton beim Ziehen erhalten bleibt. */
+const picker = document.getElementById('picker');
+const pickerSv = document.getElementById('picker-sv');
+const pickerHandle = document.getElementById('picker-handle');
+const pickerHue = document.getElementById('picker-hue');
+const pickerHex = document.getElementById('picker-hex');
+
+let pickerTarget = null;            // 'bg' oder 'accent'
+let hsv = { h: 0, s: 0, v: 0 };     // h: 0–360, s/v: 0–1
+
+function hsvToHex({ h, s, v }) {
+  const f = (n) => {
+    const k = (n + h / 60) % 6;
+    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  return rgbToHex([f(5), f(3), f(1)].map((c) => c * 255));
+}
+
+function hexToHsv(hex) {
+  const [r, g, b] = hexToRgb(hex).map((c) => c / 255);
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  return { h: (h * 60 + 360) % 360, s: max ? d / max : 0, v: max };
+}
+
+// Anzeige des Farbwählers an hsv anpassen
+function renderPicker() {
+  pickerSv.style.setProperty('--hue', hsv.h);
+  pickerHandle.style.left = `${hsv.s * 100}%`;
+  pickerHandle.style.top = `${(1 - hsv.v) * 100}%`;
+  pickerHue.value = Math.round(hsv.h);
+}
+
+// Farbwähler mit der gespeicherten Farbe des Ziels neu laden
+function syncPicker() {
+  const hex = activeColors()[pickerTarget];
+  // Farbton nicht verlieren, wenn die Farbe grau/schwarz ist
+  const next = hexToHsv(hex);
+  if (next.s === 0 || next.v === 0) next.h = hsv.h;
+  hsv = next;
+  if (document.activeElement !== pickerHex) pickerHex.value = hex;
+  renderPicker();
+}
+
+// Neue Farbe übernehmen, anzeigen und speichern
+function setColor(hex) {
+  customColors[currentTheme] = { ...activeColors(), [pickerTarget]: hex };
+  store.set(KEYS.colors, customColors);
+  applyTheme();
+  document.querySelector(`[data-color-target="${pickerTarget}"]`).style.background = hex;
+  if (document.activeElement !== pickerHex) pickerHex.value = hex;
+}
+
+function openPicker(swatch) {
+  pickerTarget = swatch.dataset.colorTarget;
+  swatches.forEach((s) => s.setAttribute('aria-expanded', String(s === swatch)));
+  swatch.closest('.settings-row').after(picker);   // direkt unter die Zeile
+  picker.hidden = false;
+  syncPicker();
+}
+
+function closePicker() {
+  picker.hidden = true;
+  pickerTarget = null;
+  swatches.forEach((s) => s.setAttribute('aria-expanded', 'false'));
+}
+
+swatches.forEach((swatch) => {
+  swatch.addEventListener('click', () => {
+    if (pickerTarget === swatch.dataset.colorTarget) closePicker();
+    else openPicker(swatch);
+  });
+});
+
+// Ziehen in der Farbfläche
+function pickFromPointer(event) {
+  const rect = pickerSv.getBoundingClientRect();
+  const clamp = (n) => Math.min(1, Math.max(0, n));
+  hsv.s = clamp((event.clientX - rect.left) / rect.width);
+  hsv.v = 1 - clamp((event.clientY - rect.top) / rect.height);
+  renderPicker();
+  setColor(hsvToHex(hsv));
+}
+pickerSv.addEventListener('pointerdown', (event) => {
+  pickerSv.setPointerCapture(event.pointerId);
+  pickFromPointer(event);
+});
+pickerSv.addEventListener('pointermove', (event) => {
+  if (pickerSv.hasPointerCapture(event.pointerId)) pickFromPointer(event);
+});
+
+pickerHue.addEventListener('input', () => {
+  hsv.h = Number(pickerHue.value);
+  renderPicker();
+  setColor(hsvToHex(hsv));
+});
+
+// Hex-Eingabe: übernehmen, sobald ein gültiger Wert dasteht
+pickerHex.addEventListener('input', () => {
+  const match = pickerHex.value.trim().match(/^#?([0-9a-f]{6})$/i);
+  if (!match) return;
+  const hex = '#' + match[1].toLowerCase();
+  setColor(hex);
+  syncPicker();
+});
+pickerHex.addEventListener('blur', () => { pickerHex.value = activeColors()[pickerTarget] ?? ''; });
+
+document.getElementById('color-reset').addEventListener('click', () => {
+  delete customColors[currentTheme];
+  store.set(KEYS.colors, customColors);
+  applyTheme();
+  syncSettings();
+});
+
+/* ---------- Hintergrundbild ----------
+   Bild-URL: wird direkt geladen. Datei vom PC: verkleinert und in
+   IndexedDB gespeichert (für localStorage zu groß).
+   Gespeichert wird { source: 'url' | 'file', url?, visibility (5–100) }. */
+const wallpaperEl = document.getElementById('wallpaper');
+const wallpaperForm = document.getElementById('wallpaper-form');
+const wallpaperUrl = document.getElementById('wallpaper-url');
+const wallpaperFile = document.getElementById('wallpaper-file');
+const wallpaperRemove = document.getElementById('wallpaper-remove');
+// Sichtbarkeits-Regler gibt es in den Schnelleinstellungen und im Fenster;
+// beide (und "Bild entfernen") erscheinen nur, wenn ein Bild gesetzt ist
+const visibilitySliders = document.querySelectorAll('[data-wallpaper-visibility]');
+const wallpaperOnly = document.querySelectorAll('[data-wallpaper-only]');
+const wallpaperHint = document.getElementById('wallpaper-hint');
+
+let wallpaper = store.get(KEYS.wallpaper, null);
+let wallpaperObjectUrl = null;
+
+// Kleiner Schlüssel-Wert-Speicher auf Basis von IndexedDB
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('startpage', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('files');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+async function dbRequest(mode, action) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('files', mode);
+    const request = action(tx.objectStore('files'));
+    tx.oncomplete = () => resolve(request.result);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+const fileStore = {
+  get: (key) => dbRequest('readonly', (s) => s.get(key)),
+  set: (key, value) => dbRequest('readwrite', (s) => s.put(value, key)),
+  delete: (key) => dbRequest('readwrite', (s) => s.delete(key)),
+};
+
+function showWallpaperHint(text) {
+  wallpaperHint.textContent = text;
+  wallpaperHint.hidden = !text;
+}
+
+async function applyWallpaper() {
+  if (wallpaperObjectUrl) URL.revokeObjectURL(wallpaperObjectUrl);
+  wallpaperObjectUrl = null;
+
+  let src = null;
+  if (wallpaper?.source === 'url') {
+    src = wallpaper.url;
+  } else if (wallpaper?.source === 'file') {
+    try {
+      const blob = await fileStore.get('wallpaper');
+      if (blob) src = wallpaperObjectUrl = URL.createObjectURL(blob);
+    } catch {
+      /* IndexedDB nicht verfügbar: ohne Bild weiter */
+    }
+  }
+
+  wallpaperEl.hidden = !src;
+  wallpaperEl.style.backgroundImage = src ? `url(${JSON.stringify(src)})` : '';
+  wallpaperEl.style.opacity = (wallpaper?.visibility ?? 60) / 100;
+  document.body.classList.toggle('has-wallpaper', !!src);
+
+  wallpaperOnly.forEach((el) => { el.hidden = !src; });
+  visibilitySliders.forEach((slider) => { slider.value = wallpaper?.visibility ?? 60; });
+  wallpaperUrl.value = wallpaper?.source === 'url' ? wallpaper.url : '';
+  wallpaperUrl.placeholder = wallpaper?.source === 'file' ? 'Eigenes Bild (Datei)' : 'Bild-URL';
+}
+
+function saveWallpaper(next) {
+  wallpaper = next;
+  store.set(KEYS.wallpaper, wallpaper);
+  return applyWallpaper();
+}
+
+// Prüft, ob sich eine Bild-URL laden lässt
+function canLoadImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.addEventListener('load', () => resolve(true));
+    img.addEventListener('error', () => resolve(false));
+    img.src = url;
+  });
+}
+
+// Lokales Bild auf höchstens 2560 px verkleinern (spart Speicher, lädt schneller)
+function resizeImageFile(file, maxSize = 2560) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.addEventListener('load', () => {
+      const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Kein Bild'))), 'image/jpeg', 0.88);
+    });
+    img.addEventListener('error', () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Kein Bild'));
+    });
+    img.src = objectUrl;
+  });
+}
+
+// Bild-URL übernehmen (Enter im Feld)
+wallpaperForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const url = normalizeUrl(wallpaperUrl.value);
+  if (!url || (wallpaper?.source === 'url' && wallpaper.url === url)) return;
+  showWallpaperHint('Lade Bild …');
+  if (!(await canLoadImage(url))) {
+    showWallpaperHint('Dieses Bild konnte nicht geladen werden.');
+    return;
+  }
+  showWallpaperHint('');
+  await fileStore.delete('wallpaper').catch(() => {});
+  saveWallpaper({ source: 'url', url, visibility: wallpaper?.visibility ?? 60 });
+});
+wallpaperUrl.addEventListener('change', () => wallpaperForm.requestSubmit());
+
+document.getElementById('wallpaper-pick').addEventListener('click', () => wallpaperFile.click());
+wallpaperFile.addEventListener('change', async () => {
+  const file = wallpaperFile.files[0];
+  wallpaperFile.value = '';
+  if (!file) return;
+  try {
+    showWallpaperHint('Bild wird vorbereitet …');
+    await fileStore.set('wallpaper', await resizeImageFile(file));
+    showWallpaperHint('');
+    saveWallpaper({ source: 'file', visibility: wallpaper?.visibility ?? 60 });
+  } catch {
+    showWallpaperHint('Das Bild konnte nicht gespeichert werden.');
+  }
+});
+
+visibilitySliders.forEach((slider) => {
+  slider.addEventListener('input', () => {
+    wallpaper = { ...wallpaper, visibility: Number(slider.value) };
+    wallpaperEl.style.opacity = wallpaper.visibility / 100;
+    visibilitySliders.forEach((other) => { if (other !== slider) other.value = slider.value; });
+    store.set(KEYS.wallpaper, wallpaper);
+  });
+});
+
+wallpaperRemove.addEventListener('click', async () => {
+  await fileStore.delete('wallpaper').catch(() => {});
+  showWallpaperHint('');
+  saveWallpaper(null);
+});
+
+applyWallpaper();
+
+
+/* ---------- Bereiche ein-/ausschalten ----------
+   Ausgeschaltete Bereiche bekommen eine Klasse "hide-<bereich>" am <body>,
+   das CSS blendet sie dann aus. */
+let sections = { ...DEFAULT_SECTIONS, ...store.get(KEYS.sections, {}) };
+
+function applySections() {
+  for (const [name, visible] of Object.entries(sections)) {
+    document.body.classList.toggle('hide-' + name, !visible);
+  }
+}
+applySections();
+
+document.querySelectorAll('[data-section]').forEach((toggle) => {
+  toggle.checked = sections[toggle.dataset.section] !== false;
+  toggle.addEventListener('change', () => {
+    sections[toggle.dataset.section] = toggle.checked;
+    store.set(KEYS.sections, sections);
+    applySections();
+  });
+});
+
+// Lesezeichen und Mikrofon gibt es nur in der Erweiterung
+if (!IS_EXTENSION) {
+  document.querySelectorAll('[data-extension-only]').forEach((el) => { el.hidden = true; });
+}
+
+// Knöpfe für chrome://-Seiten: lassen sich nur aus der Erweiterung öffnen
+if (IS_EXTENSION) {
+  const openSettings = document.getElementById('open-browser-settings');
+  openSettings.hidden = false;
+  openSettings.addEventListener('click', () => chrome.tabs.update({ url: 'chrome://settings' }));
+
+  // Berechtigungen dieser Erweiterung (z. B. Mikrofon) ansehen und ändern
+  const openPermissions = document.getElementById('open-site-permissions');
+  openPermissions.hidden = false;
+  openPermissions.addEventListener('click', () => {
+    const site = encodeURIComponent(location.origin);
+    chrome.tabs.update({ url: 'chrome://settings/content/siteDetails?site=' + site });
+  });
+}
+
+
+/* ============================================================
+   Uhr und Datum
+   ============================================================ */
+const clockEl = document.getElementById('clock');
+const dateEl = document.getElementById('date');
+const dateFormat = new Intl.DateTimeFormat('de-DE', {
+  weekday: 'long', day: 'numeric', month: 'long',
+});
+
+let showSeconds = store.get(KEYS.seconds, false) === true;
+
+const pad = (n) => String(n).padStart(2, '0');
+const shortDate = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric' });
+
+// SVG-Element mit Attributen erzeugen
+function svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, value);
+  return el;
+}
+
+// Geschlossene Form um den Mittelpunkt: Radius schwankt mit cos(waves · Winkel).
+// waves = 12 → "Keks" mit 12 Wellen; negative amp bei 4 Wellen → Kissenform.
+function wavePath(radius, amp, waves) {
+  const points = [];
+  for (let deg = 0; deg < 360; deg += 2) {
+    const a = (deg * Math.PI) / 180;
+    const r = radius + amp * Math.cos(waves * a);
+    points.push(`${(r * Math.sin(a)).toFixed(2)},${(-r * Math.cos(a)).toFixed(2)}`);
+  }
+  return 'M' + points.join('L') + 'Z';
+}
+
+/* ---------- Skins ----------
+   Jeder Skin liefert { el, update(now) }. el wird in die Uhr gesetzt,
+   update() läuft jede Sekunde. Koordinaten der Analog-Skins: Mittelpunkt
+   (0, 0), 12 Uhr zeigt nach oben (negatives y). */
+
+function buildDigitalClock() {
+  const el = document.createElement('span');
+  return {
+    el,
+    update(now) {
+      el.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      if (showSeconds) {
+        const sec = document.createElement('span');
+        sec.className = 'sec';
+        sec.textContent = `:${pad(now.getSeconds())}`;
+        el.appendChild(sec);
+      }
+    },
+  };
+}
+
+// style: classic | cookie | wavy | numbers | date | cushion
+function buildAnalogClock(style) {
+  const svg = svgEl('svg', { viewBox: '-100 -100 200 200', class: style, 'aria-hidden': 'true' });
+  let dotRadius = 74;    // Bahn des Sekundenpunkts
+  let dayText = null;
+
+  // Zifferblatt
+  if (style === 'classic') {
+    svg.appendChild(svgEl('circle', { class: 'face', r: 96 }));
+    for (let i = 0; i < 60; i++) {
+      const hour = i % 5 === 0;
+      svg.appendChild(svgEl('line', {
+        class: hour ? 'tick hour' : 'tick',
+        x1: 0, y1: hour ? -80 : -85, x2: 0, y2: -90,
+        transform: `rotate(${i * 6})`,
+      }));
+    }
+  } else if (style === 'cookie') {
+    svg.appendChild(svgEl('path', { class: 'face', d: wavePath(89, 5, 12) }));
+  } else if (style === 'wavy') {
+    svg.appendChild(svgEl('path', { class: 'face', d: wavePath(83, 6, 12) }));
+    dotRadius = 64;
+  } else if (style === 'cushion') {
+    svg.appendChild(svgEl('path', { class: 'face', d: wavePath(80, -16, 4) }));
+    dotRadius = 56;
+  } else {
+    svg.appendChild(svgEl('circle', { class: 'face', r: 92 }));
+  }
+
+  if (style === 'numbers') {
+    for (const [label, x, y] of [['12', 0, -60], ['3', 62, 0], ['6', 0, 62], ['9', -62, 0]]) {
+      const text = svgEl('text', { class: 'numeral', x, y });
+      text.textContent = label;
+      svg.appendChild(text);
+    }
+  }
+  if (style === 'date') {
+    const badge = svgEl('g', { class: 'date-badge' });
+    badge.appendChild(svgEl('rect', { x: 40, y: -15, width: 36, height: 30, rx: 12 }));
+    dayText = svgEl('text', { x: 58, y: 1 });
+    badge.appendChild(dayText);
+    svg.appendChild(badge);
+  }
+
+  // Zeiger
+  const hand = (cls, length, back = 0) =>
+    svgEl('line', { class: 'hand ' + cls, x1: 0, y1: back, x2: 0, y2: -length });
+  let hands;
+  if (style === 'classic') {
+    hands = { hour: hand('hour', 48, 10), minute: hand('minute', 72, 12), second: hand('second', 82, 18) };
+    svg.append(hands.hour, hands.minute, hands.second, svgEl('circle', { class: 'pin', r: 4 }));
+  } else if (style === 'wavy') {
+    // Zeiger mit Rand: breite Linie in Randfarbe, darüber eine schmale helle
+    const outlined = (cls, length) => {
+      const group = svgEl('g', {});
+      group.append(hand(cls + ' outer', length), hand(cls + ' inner', length));
+      return group;
+    };
+    hands = {
+      hour: outlined('hour', 38),
+      minute: outlined('minute', 58),
+      second: svgEl('circle', { class: 'second-dot ring', cx: 0, cy: -dotRadius, r: 8 }),
+    };
+    svg.append(hands.second, hands.minute, hands.hour);
+  } else {
+    hands = {
+      hour: hand('hour bold', 40),
+      minute: hand('minute bold', 62),
+      second: svgEl('circle', { class: 'second-dot', cx: 0, cy: -dotRadius, r: 7 }),
+    };
+    svg.append(hands.minute, hands.hour, hands.second);
+  }
+
+  return {
+    el: svg,
+    update(now) {
+      const seconds = now.getSeconds();
+      const minutes = now.getMinutes() + seconds / 60;
+      const hours = (now.getHours() % 12) + minutes / 60;
+      hands.hour.setAttribute('transform', `rotate(${hours * 30})`);
+      hands.minute.setAttribute('transform', `rotate(${minutes * 6})`);
+      hands.second.setAttribute('transform', `rotate(${seconds * 6})`);
+      hands.second.style.display = showSeconds ? '' : 'none';
+      if (dayText) dayText.textContent = now.getDate();
+    },
+  };
+}
+
+// Digitale Pille: shape = 'tall' (Stunden über Minuten) oder 'wide'
+function buildPillClock(shape) {
+  const el = document.createElement('span');
+  el.className = 'pill-clock ' + shape;
+  const date = document.createElement('span');
+  date.className = 'pill-date';
+  const time = document.createElement('span');
+  time.className = 'pill-time';
+  el.append(date, time);
+
+  return {
+    el,
+    update(now) {
+      date.textContent = shortDate.format(now);   // z. B. "Sa., 10."
+      const parts = shape === 'tall'
+        ? [pad(now.getHours()), pad(now.getMinutes())]
+        : [`${pad(now.getHours())}:${pad(now.getMinutes())}`];
+      const nodes = parts.map((part) => {
+        const span = document.createElement('span');
+        span.textContent = part;
+        return span;
+      });
+      if (showSeconds) {
+        const sec = document.createElement('span');
+        sec.className = 'pill-sec';
+        sec.textContent = shape === 'tall' ? pad(now.getSeconds()) : `:${pad(now.getSeconds())}`;
+        if (shape === 'wide') nodes[0].appendChild(sec);
+        else nodes.push(sec);
+      }
+      time.replaceChildren(...nodes);
+    },
+  };
+}
+
+// Alle Skins (Reihenfolge = Reihenfolge in der Auswahl)
+const CLOCK_SKINS = {
+  digital:  { name: 'Digital',     build: buildDigitalClock },
+  analog:   { name: 'Analog',      build: () => buildAnalogClock('classic') },
+  cookie:   { name: 'Keks',        build: () => buildAnalogClock('cookie') },
+  wavy:     { name: 'Welle',       build: () => buildAnalogClock('wavy') },
+  numbers:  { name: 'Ziffern',     build: () => buildAnalogClock('numbers') },
+  date:     { name: 'Datum',       build: () => buildAnalogClock('date') },
+  cushion:  { name: 'Kissen',      build: () => buildAnalogClock('cushion') },
+  pillTall: { name: 'Pille hoch',  build: () => buildPillClock('tall') },
+  pillWide: { name: 'Pille breit', build: () => buildPillClock('wide') },
+};
+
+let clockStyle = store.get(KEYS.clockStyle, 'digital');
+if (!(clockStyle in CLOCK_SKINS)) clockStyle = 'digital';
+let clockSkin = null;   // aktuell angezeigter Skin { el, update }
+
+function renderClock() {
+  const now = new Date();
+  dateEl.textContent = dateFormat.format(now);   // z. B. "Freitag, 9. Oktober"
+  clockEl.setAttribute('aria-label', `${pad(now.getHours())}:${pad(now.getMinutes())} Uhr`);
+  clockSkin.update(now);
+}
+
+function setClockStyle(style) {
+  clockStyle = style in CLOCK_SKINS ? style : 'digital';
+  store.set(KEYS.clockStyle, clockStyle);
+  clockSkin = CLOCK_SKINS[clockStyle].build();
+  clockEl.replaceChildren(clockSkin.el);
+  renderClock();
+  syncClockControls();
+}
+
+/* ---------- Auswahl: Liste in den Schnelleinstellungen, Vorschau-Kacheln im Fenster ---------- */
+const clockSelect = document.getElementById('clock-select');
+const skinGrid = document.getElementById('skin-grid');
+
+for (const [key, skin] of Object.entries(CLOCK_SKINS)) {
+  clockSelect.appendChild(new Option(skin.name, key));
+}
+clockSelect.addEventListener('change', () => setClockStyle(clockSelect.value));
+
+// Vorschau-Kacheln zeigen jeden Skin mit fester Uhrzeit 10:10
+function renderSkinGrid() {
+  const sample = new Date(2026, 0, 9, 10, 10, 30);
+  skinGrid.replaceChildren(...Object.entries(CLOCK_SKINS).map(([key, skin]) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'skin-option';
+    button.dataset.skin = key;
+    const preview = document.createElement('span');
+    preview.className = 'skin-preview clock';
+    const built = skin.build();
+    built.update(sample);
+    preview.appendChild(built.el);
+    const label = document.createElement('span');
+    label.textContent = skin.name;
+    button.append(preview, label);
+    button.addEventListener('click', () => setClockStyle(key));
+    return button;
+  }));
+  syncClockControls();
+}
+
+function syncClockControls() {
+  clockSelect.value = clockStyle;
+  skinGrid.querySelectorAll('[data-skin]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.skin === clockStyle));
+  });
+}
+
+setClockStyle(clockStyle);
+renderSkinGrid();
+
+// Auf die nächste volle Sekunde ausrichten, damit die Anzeige nicht hinterherhinkt
+function tick() {
+  renderClock();
+  setTimeout(tick, 1000 - (Date.now() % 1000));
+}
+tick();
+
+clockEl.addEventListener('click', () => {
+  showSeconds = !showSeconds;
+  store.set(KEYS.seconds, showSeconds);
+  renderClock();
+});
+
+
+/* ============================================================
+   Suche (Google)
+   ============================================================ */
+const searchForm = document.getElementById('search');
+const searchInput = document.getElementById('search-input');
+
+searchForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const query = searchInput.value.trim();
+  if (!query) return;
+  location.href = 'https://www.google.com/search?q=' + encodeURIComponent(query);
+});
+
+searchInput.focus();
+
+
+/* ============================================================
+   Spracheingabe (nur in der Erweiterung)
+   Aufnahme per Mikrofon, Transkription lokal mit Whisper in
+   whisper-worker.js. Es verlässt kein Ton den Rechner.
+   Klick startet die Aufnahme; sie endet bei erneutem Klick oder
+   automatisch nach einer kurzen Sprechpause.
+   ============================================================ */
+const micButton = document.getElementById('mic');
+
+if (IS_EXTENSION && navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+  micButton.hidden = false;
+
+  const SPEECH_LEVEL = 0.02;      // Lautstärke (RMS), ab der es als Sprache zählt
+  const SILENCE_MS = 1500;        // Pause nach dem Sprechen, die die Aufnahme beendet
+  const NO_SPEECH_MS = 6000;      // Abbruch, wenn gar nichts gesagt wird
+  const MAX_MS = 20000;           // maximale Aufnahmedauer
+  const PLACEHOLDER = searchInput.placeholder;
+
+  let worker = null;
+  let state = 'idle';             // idle | starting | recording | transcribing
+  let recording = null;           // aktuelle Aufnahme (Stream, Recorder, Timer …)
+
+  // Worker erst beim ersten Klick starten; er lädt dann schon das Modell
+  function getWorker() {
+    if (!worker) {
+      worker = new Worker(chrome.runtime.getURL('whisper-worker.js'), { type: 'module' });
+      worker.addEventListener('message', onWorkerMessage);
+      worker.postMessage({ type: 'load' });
+    }
+    return worker;
+  }
+
+  function setState(next, placeholder = PLACEHOLDER) {
+    state = next;
+    micButton.classList.toggle('recording', next === 'recording');
+    micButton.classList.toggle('busy', next === 'transcribing');
+    searchInput.placeholder = placeholder;
+  }
+
+  // Kurz einen Hinweis im Suchfeld zeigen, danach wieder den normalen Platzhalter
+  function flashMessage(text) {
+    setState('idle', text);
+    setTimeout(() => { if (state === 'idle') searchInput.placeholder = PLACEHOLDER; }, 3000);
+  }
+
+  // Bekannte Whisper-"Halluzinationen" bei Stille oder Rauschen
+  const HALLUCINATIONS = /^(untertitel|copyright|vielen dank( fürs zuschauen)?|danke( fürs zuschauen)?|tschüss)\b/i;
+
+  function onWorkerMessage({ data }) {
+    if (data.type === 'result' && state === 'transcribing') {
+      // Satzzeichen am Ende stören bei Suchanfragen
+      const text = data.text.trim().replace(/[.!。]+$/, '').trim();
+      if (!text || HALLUCINATIONS.test(text) || /^[\[(♪*]/.test(text)) {
+        flashMessage('Nichts verstanden');
+        return;
+      }
+      setState('idle');
+      searchInput.value = text;
+      searchInput.focus();
+      searchInput.setSelectionRange(text.length, text.length);
+    } else if (data.type === 'error') {
+      console.error('Spracherkennung:', data.message);
+      if (state === 'transcribing') flashMessage('Spracherkennung fehlgeschlagen');
+    }
+  }
+
+  // Chromium zeigt auf der Neuer-Tab-Seite keine Berechtigungs-Abfrage an;
+  // getUserMedia würde dann einfach ewig warten. Fehlt die Erlaubnis, führt
+  // der Knopf deshalb zu mic-permission.html, wo Helium normal nachfragt.
+  // Die Erlaubnis gilt danach für die ganze Erweiterung, also auch hier.
+  async function hasMicPermission() {
+    try {
+      const status = await navigator.permissions.query({ name: 'microphone' });
+      return status.state === 'granted';
+    } catch {
+      return false;
+    }
+  }
+
+  async function startRecording() {
+    state = 'starting';   // weitere Klicks ignorieren, bis die Aufnahme läuft
+    if (!(await hasMicPermission())) {
+      location.href = chrome.runtime.getURL('mic-permission.html');
+      return;
+    }
+
+    getWorker();
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+    } catch {
+      flashMessage('Kein Zugriff aufs Mikrofon');
+      return;
+    }
+
+    const recorder = new MediaRecorder(stream);
+    const chunks = [];
+    recorder.addEventListener('dataavailable', (event) => chunks.push(event.data));
+
+    // Lautstärke messen, um Sprechpausen zu erkennen
+    const audioCtx = new AudioContext();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+
+    const startedAt = Date.now();
+    let lastSpeechAt = 0;
+
+    const monitor = setInterval(() => {
+      analyser.getFloatTimeDomainData(samples);
+      const rms = Math.sqrt(samples.reduce((sum, s) => sum + s * s, 0) / samples.length);
+      const now = Date.now();
+      if (rms > SPEECH_LEVEL) lastSpeechAt = now;
+
+      if (lastSpeechAt && now - lastSpeechAt > SILENCE_MS) stopRecording();
+      else if (!lastSpeechAt && now - startedAt > NO_SPEECH_MS) stopRecording();
+      else if (now - startedAt > MAX_MS) stopRecording();
+    }, 100);
+
+    const rec = { stream, recorder, chunks, audioCtx, monitor, heardSpeech: () => lastSpeechAt > 0 };
+    recording = rec;
+    recorder.addEventListener('stop', () => finishRecording(rec));
+    recorder.start();
+    setState('recording', 'Sprich jetzt …');
+  }
+
+  function stopRecording() {
+    if (state !== 'recording' || !recording) return;
+    clearInterval(recording.monitor);
+    recording.recorder.stop();   // löst finishRecording aus
+  }
+
+  async function finishRecording(rec) {
+    recording = null;
+    rec.stream.getTracks().forEach((track) => track.stop());
+    rec.audioCtx.close();
+
+    if (!rec.heardSpeech()) {
+      flashMessage('Nichts gehört');
+      return;
+    }
+
+    setState('transcribing', 'Transkribiere …');
+    try {
+      // Whisper erwartet 16 kHz mono als Float32Array
+      const blob = new Blob(rec.chunks, { type: rec.recorder.mimeType });
+      const decodeCtx = new AudioContext({ sampleRate: 16000 });
+      const buffer = await decodeCtx.decodeAudioData(await blob.arrayBuffer());
+      decodeCtx.close();
+      const audio = buffer.getChannelData(0);
+      getWorker().postMessage({ type: 'transcribe', audio }, [audio.buffer]);
+    } catch (error) {
+      console.error('Audio konnte nicht gelesen werden:', error);
+      flashMessage('Aufnahme fehlgeschlagen');
+    }
+  }
+
+  micButton.addEventListener('click', () => {
+    if (state === 'idle') startRecording();
+    else if (state === 'recording') stopRecording();
+  });
+}
+
+
+/* ============================================================
+   Wetter (Open-Meteo, ohne API-Key)
+   ============================================================ */
+const weatherEl = document.getElementById('weather');            // kompakt (Standard-Theme)
+const weatherWidget = document.getElementById('weather-widget');  // Widget (Material You)
+
+// WMO-Wettercode -> Emoji
+function weatherEmoji(code, isDay) {
+  if (code === 0) return isDay ? '☀️' : '🌙';
+  if (code === 1) return isDay ? '🌤️' : '🌙';
+  if (code === 2) return '⛅';
+  if (code === 3) return '☁️';
+  if (code === 45 || code === 48) return '🌫️';
+  if (code >= 51 && code <= 57) return '🌦️';    // Niesel
+  if (code >= 61 && code <= 67) return '🌧️';    // Regen
+  if (code >= 71 && code <= 77) return '🌨️';    // Schnee
+  if (code >= 80 && code <= 82) return '🌦️';    // Regenschauer
+  if (code === 85 || code === 86) return '🌨️';  // Schneeschauer
+  if (code >= 95) return '⛈️';                   // Gewitter
+  return '🌡️';
+}
+
+const weatherDetails = document.getElementById('weather-details');
+
+// Gespeicherter Ort (nur übernehmen, wenn die Koordinaten stimmen)
+let place = store.get(KEYS.place, null);
+if (!place || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
+  place = DEFAULT_PLACE;
+}
+
+let showWeatherDetails = store.get(KEYS.weatherDetails, false) === true;
+
+// fetch mit Zeitlimit, damit eine hängende Verbindung nichts blockiert
+async function fetchJson(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Eine Zeile der Details: "Bezeichnung <strong>Wert</strong>"
+function detailItem(label, value) {
+  const span = document.createElement('span');
+  const strong = document.createElement('strong');
+  strong.textContent = value;
+  span.append(label + ' ', strong);
+  return span;
+}
+
+async function loadWeather() {
+  const params = new URLSearchParams({
+    latitude: place.latitude,
+    longitude: place.longitude,
+    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,wind_speed_10m',
+    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset',
+    timezone: 'auto',   // Tageswerte in der Zeitzone des Orts
+    forecast_days: 2,   // zweiter Tag für den Sonnenaufgang nach Sonnenuntergang
+  });
+
+  try {
+    const data = await fetchJson('https://api.open-meteo.com/v1/forecast?' + params);
+    const { current, daily } = data;
+    const round = (n) => Math.round(n);
+
+    document.getElementById('weather-icon').textContent =
+      weatherEmoji(current.weather_code, current.is_day === 1);
+    document.getElementById('weather-temp').textContent = `${round(current.temperature_2m)}°`;
+    document.getElementById('weather-range').textContent =
+      `↑${round(daily.temperature_2m_max[0])}° ↓${round(daily.temperature_2m_min[0])}°`;
+    weatherEl.title = `Wetter in ${place.name}`;
+
+    // Widget: Temperatur in der Kieselform, Höchst-/Tiefstwert und Ort im Kreis,
+    // nächster Sonnenauf- oder -untergang in der Pille
+    document.getElementById('ww-temp').textContent = `${round(current.temperature_2m)}°`;
+    document.getElementById('ww-icon').textContent = weatherEmoji(current.weather_code, current.is_day === 1);
+    document.getElementById('ww-range').textContent =
+      `${round(daily.temperature_2m_max[0])}° / ${round(daily.temperature_2m_min[0])}°`;
+    document.getElementById('ww-place').textContent = place.name;
+    document.getElementById('ww-sun').textContent = nextSunEvent(data);
+    weatherWidget.title = `Wetter in ${place.name}`;
+
+    // Details: Ort, gefühlte Temperatur, Luftfeuchtigkeit, Wind, Regenrisiko
+    const placeLine = document.createElement('span');
+    placeLine.className = 'place';
+    placeLine.textContent = '📍 ' + place.detail;
+    const rain = daily.precipitation_probability_max?.[0];
+    weatherDetails.replaceChildren(
+      placeLine,
+      detailItem('Gefühlt', `${round(current.apparent_temperature)}°`),
+      detailItem('Luftfeuchtigkeit', `${round(current.relative_humidity_2m)} %`),
+      detailItem('Wind', `${round(current.wind_speed_10m)} km/h`),
+      detailItem('Regenrisiko', rain == null ? '–' : `${round(rain)} %`),
+    );
+
+    weatherEl.hidden = weatherWidget.hidden = false;
+    weatherDetails.hidden = !showWeatherDetails;
+  } catch {
+    // Offline oder Fehler: Wetterfeld einfach ausblenden
+    weatherEl.hidden = weatherWidget.hidden = true;
+    weatherDetails.hidden = true;
+  }
+}
+
+// Nächster Sonnenaufgang bzw. -untergang am Ort, z. B. "🌇 18:08".
+// Open-Meteo liefert Ortszeit ohne Zeitzone; verglichen wird deshalb mit der
+// aktuellen Uhrzeit am Ort (jetzt + Zeitzonen-Versatz des Orts).
+function nextSunEvent(data) {
+  const nowAtPlace = Date.now() + data.utc_offset_seconds * 1000;
+  const events = [];
+  data.daily.sunrise.forEach((time) => events.push(['🌅', time]));
+  data.daily.sunset.forEach((time) => events.push(['🌇', time]));
+  const next = events
+    .map(([icon, time]) => ({ icon, time, at: Date.parse(time + 'Z') }))
+    .filter((event) => event.at > nowAtPlace)
+    .sort((a, b) => a.at - b.at)[0];
+  return next ? `${next.icon} ${next.time.slice(11, 16)}` : '';
+}
+
+// Klick aufs Wetter klappt die Details auf und zu (Zustand wird gemerkt)
+function syncWeatherDetails() {
+  weatherEl.setAttribute('aria-expanded', String(showWeatherDetails));
+  weatherWidget.setAttribute('aria-expanded', String(showWeatherDetails));
+  if (!weatherEl.hidden) weatherDetails.hidden = !showWeatherDetails;
+}
+for (const trigger of [weatherEl, weatherWidget]) {
+  trigger.addEventListener('click', () => {
+    showWeatherDetails = !showWeatherDetails;
+    store.set(KEYS.weatherDetails, showWeatherDetails);
+    syncWeatherDetails();
+  });
+}
+syncWeatherDetails();
+
+loadWeather();
+setInterval(loadWeather, 30 * 60 * 1000);   // alle 30 Minuten aktualisieren
+
+
+/* ---------- Wetter-Ort ändern (Ortssuche von Open-Meteo) ---------- */
+const placeForm = document.getElementById('place-form');
+const placeInput = document.getElementById('place-input');
+const placeResults = document.getElementById('place-results');
+const placeHint = document.getElementById('place-hint');
+
+function showCurrentPlace() {
+  placeHint.textContent = 'Aktuell: ' + place.detail;
+}
+showCurrentPlace();
+
+// "Berlin, Berlin, Deutschland" → "Berlin, Deutschland"
+function placeDetail(result) {
+  return [...new Set([result.name, result.admin1, result.country].filter(Boolean))].join(', ');
+}
+
+function choosePlace(result) {
+  place = {
+    name: result.name,
+    detail: placeDetail(result),
+    latitude: result.latitude,
+    longitude: result.longitude,
+  };
+  store.set(KEYS.place, place);
+  placeResults.hidden = true;
+  placeInput.value = '';
+  showCurrentPlace();
+  loadWeather();
+}
+
+placeForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const query = placeInput.value.trim();
+  if (query.length < 2) return;
+
+  placeHint.textContent = 'Suche …';
+  placeResults.hidden = true;
+  try {
+    const params = new URLSearchParams({ name: query, count: 6, language: 'de', format: 'json' });
+    const data = await fetchJson('https://geocoding-api.open-meteo.com/v1/search?' + params);
+    const results = data.results || [];
+    if (!results.length) {
+      placeHint.textContent = `Kein Ort „${query}“ gefunden.`;
+      return;
+    }
+    // Trefferliste: Ort, darunter Landkreis/Bundesland/Land. Sehen zwei Treffer
+    // trotzdem gleich aus, kommen die Koordinaten dazu.
+    const regionOf = (r) => [...new Set([r.admin2, r.admin1, r.country].filter(Boolean))].join(', ');
+    const labels = results.map((r) => r.name + '|' + regionOf(r));
+    placeResults.replaceChildren(...results.map((result, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      const small = document.createElement('small');
+      small.textContent = regionOf(result);
+      if (labels.indexOf(labels[index]) !== labels.lastIndexOf(labels[index])) {
+        small.textContent += ` · ${result.latitude.toFixed(2)}, ${result.longitude.toFixed(2)}`;
+      }
+      button.append(result.name, document.createElement('br'), small);
+      button.addEventListener('click', () => choosePlace(result));
+      return button;
+    }));
+    placeResults.hidden = false;
+    placeHint.textContent = 'Ort auswählen:';
+  } catch {
+    placeHint.textContent = 'Ortssuche gerade nicht möglich (offline?).';
+  }
+});
+
+
+/* ============================================================
+   Runde Symbole (gemeinsam für Schnellzugriffe und Twitch)
+   ============================================================ */
+
+// Kreis mit Anfangsbuchstabe als Ersatz für ein fehlendes Bild
+function initialAvatar(text) {
+  const circle = document.createElement('div');
+  circle.className = 'avatar initial';
+  circle.textContent = (text || '').trim().charAt(0) || '?';
+  return circle;
+}
+
+// Rundes Bild. Lädt es nicht (offline oder Fehler), erscheint der Anfangsbuchstabe.
+// favicon = true: kleines Website-Symbol, wird mit Rand statt formatfüllend gezeigt.
+function avatar(src, letterSource, favicon = false) {
+  if (!src) return initialAvatar(letterSource);
+  const img = document.createElement('img');
+  img.className = favicon ? 'avatar favicon' : 'avatar';
+  img.alt = '';
+  img.loading = 'lazy';
+  // Listener vor dem Setzen von src, damit kein Fehler verpasst wird
+  img.addEventListener('error', () => img.replaceWith(initialAvatar(letterSource)), { once: true });
+  img.src = src;
+  return img;
+}
+
+function tileName(text) {
+  const span = document.createElement('span');
+  span.className = 'icon-name';
+  span.textContent = text;
+  return span;
+}
+
+// Kleiner Knopf oben an einer Kachel: kind = 'del' (×) oder 'edit' (✎)
+function tileAction(kind, label, onClick) {
+  const button = document.createElement('button');
+  button.className = 'tile-action ' + kind;
+  button.type = 'button';
+  button.textContent = kind === 'del' ? '×' : '✎';
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+// "+"-Kachel am Ende einer Reihe
+function addTile(label, onClick) {
+  const button = document.createElement('button');
+  button.className = 'icon-tile add';
+  button.type = 'button';
+  button.title = label;
+  const circle = document.createElement('div');
+  circle.className = 'avatar plus';
+  circle.textContent = '+';
+  button.append(circle, tileName('Hinzufügen'));
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+
+/* ============================================================
+   Schnellzugriffe
+   Symbol: eigenes Bild (Bild-Link oder lokale Datei), sonst
+   automatisch das Website-Symbol über unavatar.io, sonst der
+   Anfangsbuchstabe.
+   ============================================================ */
+const linksEl = document.getElementById('links');
+const linkForm = document.getElementById('link-form');
+const linkName = document.getElementById('link-name');
+const linkUrl = document.getElementById('link-url');
+const linkIconUrl = document.getElementById('link-icon-url');
+const linkIconFile = document.getElementById('link-icon-file');
+const linkPreview = document.getElementById('link-preview');
+const linkHint = document.getElementById('link-hint');
+const linkSubmit = document.getElementById('link-submit');
+
+const LINK_HINT = 'Eigenes Bild: Bild-Link einfügen, Datei wählen oder ein Bild hierher ziehen. ' +
+                  'Ohne eigenes Bild wird das Symbol der Website geladen.';
+
+// Beim allerersten Laden die Startwerte übernehmen und speichern
+let links = store.get(KEYS.links, null);
+if (!Array.isArray(links)) {
+  links = DEFAULT_LINKS.slice();
+  store.set(KEYS.links, links);
+}
+
+// Ergänzt fehlendes "https://" und prüft, ob eine gültige URL entsteht
+function normalizeUrl(input) {
+  let url = input.trim();
+  if (!url) return null;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
+  try {
+    return new URL(url).href;
+  } catch {
+    return null;
+  }
+}
+
+// Automatisches Website-Symbol (nur für http/https-Adressen)
+function autoIconUrl(url) {
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (!/^https?:$/.test(protocol) || !hostname) return null;
+    return 'https://unavatar.io/' + hostname.replace(/^www\./, '') + '?fallback=false';
+  } catch {
+    return null;
+  }
+}
+
+function linkAvatar(link) {
+  if (link.icon) return avatar(link.icon, link.name);
+  return avatar(autoIconUrl(link.url), link.name, true);
+}
+
+function saveLinks() {
+  store.set(KEYS.links, links);
+  renderLinks();
+}
+
+function renderLinks() {
+  linksEl.replaceChildren();
+
+  links.forEach((link, index) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'tile-wrap';
+
+    const a = document.createElement('a');
+    a.className = 'icon-tile';
+    a.href = link.url;
+    a.title = link.url;
+    a.append(linkAvatar(link), tileName(link.name));
+
+    wrap.append(
+      a,
+      tileAction('edit', `${link.name} bearbeiten`, () => openLinkForm(index)),
+      tileAction('del', `${link.name} entfernen`, () => {
+        if (editIndex === index) closeLinkForm();
+        links.splice(index, 1);
+        saveLinks();
+      }),
+    );
+    linksEl.appendChild(wrap);
+  });
+
+  // "+" öffnet das leere Formular bzw. schließt es wieder
+  linksEl.appendChild(addTile('Link hinzufügen', () => {
+    if (!linkForm.hidden && editIndex === null) closeLinkForm();
+    else openLinkForm(null);
+  }));
+}
+
+/* ---------- Formular: Link hinzufügen oder bearbeiten ---------- */
+let editIndex = null;    // null = neuer Link, sonst Index des bearbeiteten Links
+let pendingIcon = '';    // eigenes Bild (URL oder data:-URL); leer = automatisch
+
+function openLinkForm(index) {
+  editIndex = index;
+  const link = index === null ? { name: '', url: '' } : links[index];
+  linkName.value = link.name;
+  linkUrl.value = link.url;
+  pendingIcon = link.icon || '';
+  linkIconUrl.value = pendingIcon.startsWith('data:') ? '' : pendingIcon;
+  linkIconUrl.placeholder = pendingIcon.startsWith('data:') ? 'Eigenes Bild (Datei)' : 'Bild-URL (optional)';
+  linkIconFile.value = '';
+  linkHint.textContent = LINK_HINT;
+  linkSubmit.textContent = index === null ? 'Hinzufügen' : 'Speichern';
+  linkForm.hidden = false;
+  updatePreview();
+  linkName.focus();
+}
+
+function closeLinkForm() {
+  linkForm.hidden = true;
+  linkForm.reset();
+  editIndex = null;
+  pendingIcon = '';
+}
+
+// Vorschau des Symbols im Formular
+function updatePreview() {
+  const url = normalizeUrl(linkUrl.value);
+  const label = linkName.value || linkUrl.value;
+  linkPreview.replaceChildren(pendingIcon
+    ? avatar(pendingIcon, label)
+    : avatar(url && autoIconUrl(url), label, true));
+}
+
+function setPendingIcon(icon, message = LINK_HINT) {
+  pendingIcon = icon;
+  linkIconUrl.placeholder = icon.startsWith('data:') ? 'Eigenes Bild (Datei)' : 'Bild-URL (optional)';
+  linkHint.textContent = message;
+  updatePreview();
+}
+
+// Bild-Link aus dem Textfeld übernehmen
+function applyIconUrl() {
+  const value = linkIconUrl.value.trim();
+  if (!value) {
+    if (!pendingIcon.startsWith('data:')) setPendingIcon('');
+    return;
+  }
+  const url = normalizeUrl(value);
+  if (url) setPendingIcon(url);
+  else linkHint.textContent = 'Das ist keine gültige Bild-URL.';
+}
+
+// Lokales Bild auf 128 × 128 px zuschneiden und als data:-URL speichern
+// (klein genug für localStorage, funktioniert auch offline)
+function imageFileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.addEventListener('load', () => {
+      const size = 128;
+      const width = img.naturalWidth || size;
+      const height = img.naturalHeight || size;
+      const scale = Math.max(size / width, size / height);   // formatfüllend, mittig
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      canvas.getContext('2d').drawImage(
+        img, (size - width * scale) / 2, (size - height * scale) / 2, width * scale, height * scale);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL('image/webp', 0.9));
+    });
+    img.addEventListener('error', () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Datei ist kein lesbares Bild'));
+    });
+    img.src = objectUrl;
+  });
+}
+
+async function useImageFile(file) {
+  if (!file) return;
+  try {
+    const dataUrl = await imageFileToDataUrl(file);
+    linkIconUrl.value = '';
+    setPendingIcon(dataUrl, `Eigenes Bild: ${file.name}`);
+  } catch {
+    linkHint.textContent = 'Diese Datei konnte nicht als Bild gelesen werden.';
+  }
+}
+
+linkUrl.addEventListener('change', updatePreview);
+// Beim Tippen des Namens nur den Anfangsbuchstaben der Vorschau anpassen
+linkName.addEventListener('input', () => {
+  const initial = linkPreview.querySelector('.initial');
+  if (initial) initial.textContent = (linkName.value || linkUrl.value).trim().charAt(0) || '?';
+});
+linkIconUrl.addEventListener('change', applyIconUrl);
+
+document.getElementById('link-icon-pick').addEventListener('click', () => linkIconFile.click());
+linkIconFile.addEventListener('change', () => useImageFile(linkIconFile.files[0]));
+document.getElementById('link-icon-clear').addEventListener('click', () => {
+  linkIconUrl.value = '';
+  setPendingIcon('');
+});
+
+// Bild per Drag & Drop: Datei vom PC oder Bild aus einem anderen Browserfenster
+linkForm.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  linkForm.classList.add('dragover');
+});
+linkForm.addEventListener('dragleave', (event) => {
+  if (!linkForm.contains(event.relatedTarget)) linkForm.classList.remove('dragover');
+});
+linkForm.addEventListener('drop', (event) => {
+  event.preventDefault();
+  linkForm.classList.remove('dragover');
+  const file = [...event.dataTransfer.files].find((f) => f.type.startsWith('image/'));
+  if (file) {
+    useImageFile(file);
+    return;
+  }
+  const dropped = (event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain'))
+    .split('\n').map((line) => line.trim()).find((line) => /^https?:\/\//i.test(line));
+  if (dropped) {
+    linkIconUrl.value = dropped;
+    applyIconUrl();
+  }
+});
+
+linkForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  applyIconUrl();   // falls der Bild-Link noch nicht übernommen wurde (Enter)
+  const url = normalizeUrl(linkUrl.value);
+  if (!url) {
+    linkUrl.focus();
+    return;
+  }
+  // Ohne Namen wird der Hostname verwendet
+  const name = linkName.value.trim() || new URL(url).hostname.replace(/^www\./, '') || url;
+  const entry = { name, url };
+  if (pendingIcon) entry.icon = pendingIcon;
+
+  if (editIndex === null) links.push(entry);
+  else links[editIndex] = entry;
+  closeLinkForm();
+  saveLinks();
+});
+
+document.getElementById('link-cancel').addEventListener('click', closeLinkForm);
+linkForm.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeLinkForm();
+});
+
+renderLinks();
+
+
+/* ============================================================
+   Twitch-Kanäle
+   Profilbilder über unavatar.io; ohne Bild der Anfangsbuchstabe.
+   ============================================================ */
+const twitchEl = document.getElementById('twitch');
+const channelForm = document.getElementById('channel-form');
+const channelInput = document.getElementById('channel-name');
+const channelHint = document.getElementById('channel-hint');
+
+// Beim allerersten Laden die Startwerte übernehmen und speichern
+let channels = store.get(KEYS.channels, null);
+if (!Array.isArray(channels)) {
+  channels = TWITCH_CHANNELS.slice();
+  store.set(KEYS.channels, channels);
+}
+
+// Kanalname aus "name", "@name" oder einem twitch.tv-Link lesen
+function parseChannel(input) {
+  const value = input.trim();
+  const match = value.match(/twitch\.tv\/([a-z0-9_]{2,25})/i) || value.match(/^@?([a-z0-9_]{2,25})$/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function renderChannels() {
+  twitchEl.replaceChildren();
+
+  channels.forEach((channel, index) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'tile-wrap';
+
+    const a = document.createElement('a');
+    a.className = 'icon-tile';
+    a.href = 'https://www.twitch.tv/' + encodeURIComponent(channel);
+    a.title = channel;
+    // fallback=false: unavatar liefert dann einen Fehler statt eines Platzhalterbilds
+    a.append(
+      avatar('https://unavatar.io/twitch/' + encodeURIComponent(channel) + '?fallback=false', channel),
+      tileName(channel));
+
+    wrap.append(a, tileAction('del', `${channel} entfernen`, () => {
+      channels.splice(index, 1);
+      store.set(KEYS.channels, channels);
+      renderChannels();
+    }));
+    twitchEl.appendChild(wrap);
+  });
+
+  twitchEl.appendChild(addTile('Twitch-Kanal hinzufügen', () => toggleChannelForm()));
+}
+
+function toggleChannelForm(open) {
+  const show = typeof open === 'boolean' ? open : channelForm.hidden;
+  channelForm.hidden = !show;
+  channelHint.hidden = true;
+  if (show) channelInput.focus();
+  else channelForm.reset();
+}
+
+channelForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const channel = parseChannel(channelInput.value);
+  if (!channel) {
+    channelHint.textContent = 'Bitte einen Kanalnamen (2–25 Zeichen: Buchstaben, Ziffern, _) oder einen twitch.tv-Link eingeben.';
+    channelHint.hidden = false;
+    channelInput.focus();
+    return;
+  }
+  if (!channels.includes(channel)) {
+    channels.push(channel);
+    store.set(KEYS.channels, channels);
+    renderChannels();
+  }
+  toggleChannelForm(false);
+});
+
+document.getElementById('channel-cancel').addEventListener('click', () => toggleChannelForm(false));
+channelForm.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') toggleChannelForm(false);
+});
+
+renderChannels();
+
+
+/* ============================================================
+   Apps-Menü oben rechts (wie bei Google)
+   Die Symbole liegen lokal in extension/icons/apps/.
+   ============================================================ */
+const appsToggle = document.getElementById('apps-toggle');
+const appsMenu = document.getElementById('apps-menu');
+
+function renderApps() {
+  appsMenu.replaceChildren(...APPS.map((app) => {
+    const a = document.createElement('a');
+    a.className = 'app';
+    a.href = app.url;
+    a.title = app.name;
+    const iconSrc = app.icon ? `${ASSET_BASE}icons/apps/${app.icon}.png` : autoIconUrl(app.url);
+    const icon = avatar(iconSrc, app.name);
+    icon.classList.remove('avatar');   // keine runde Rahmung: App-Symbole haben eigene Formen
+    const name = document.createElement('span');
+    name.textContent = app.name;
+    a.append(icon, name);
+    return a;
+  }));
+}
+
+function toggleApps(open) {
+  const show = typeof open === 'boolean' ? open : appsMenu.hidden;
+  if (show && !appsMenu.childElementCount) renderApps();   // erst beim ersten Öffnen bauen
+  appsMenu.hidden = !show;
+  appsToggle.setAttribute('aria-expanded', String(show));
+}
+
+appsToggle.addEventListener('click', (event) => {
+  event.stopPropagation();
+  toggleApps();
+});
+appsMenu.addEventListener('click', (event) => event.stopPropagation());
+document.addEventListener('click', () => toggleApps(false));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !appsMenu.hidden) {
+    toggleApps(false);
+    appsToggle.focus();
+  }
+});
+
+
+/* ============================================================
+   Lesezeichenleiste
+   Chromium zeigt die eigene Leiste ("Nur auf neuem Tab anzeigen")
+   nicht auf Erweiterungs-Seiten an. Deshalb liest die Erweiterung
+   die Lesezeichen über chrome.bookmarks und zeigt sie hier an.
+   Als file:// gibt es diese API nicht; die Leiste bleibt dann aus.
+   ============================================================ */
+const hasBookmarksApi = typeof chrome !== 'undefined' && chrome.bookmarks;
+
+if (hasBookmarksApi) {
+  const barEl = document.getElementById('bookmarks');
+  let menuEl = null;       // aktuell geöffnetes Ordner-Menü
+  let menuButton = null;   // Ordner-Knopf, zu dem das Menü gehört
+
+  const FOLDER_SVG =
+    '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' +
+    '<path d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.4l1.6 2h5A1.5 1.5 0 0 1 14.5 5v7.5A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5z"/></svg>';
+
+  // Favicon aus dem Browser-Cache (keine Netzwerkanfrage)
+  function faviconUrl(pageUrl) {
+    return chrome.runtime.getURL('/_favicon/') +
+      '?pageUrl=' + encodeURIComponent(pageUrl) + '&size=32';
+  }
+
+  function folderIcon() {
+    const span = document.createElement('span');
+    span.className = 'bm-icon folder';
+    span.innerHTML = FOLDER_SVG;   // fester String, keine Nutzerdaten
+    return span;
+  }
+
+  function label(text) {
+    const span = document.createElement('span');
+    span.className = 'bm-label';
+    span.textContent = text;
+    return span;
+  }
+
+  // Ein einzelnes Lesezeichen (Link) oder einen Ordner (Knopf) bauen
+  function bookmarkNode(node, inMenu) {
+    if (node.url) {
+      // Bookmarklets laufen auf Erweiterungs-Seiten nicht
+      if (node.url.startsWith('javascript:')) return null;
+
+      const a = document.createElement('a');
+      a.className = 'bm';
+      a.href = node.url;
+      a.title = node.title ? `${node.title}\n${node.url}` : node.url;
+
+      const icon = document.createElement('img');
+      icon.className = 'bm-icon';
+      icon.alt = '';
+      icon.src = faviconUrl(node.url);
+      a.append(icon);
+      if (node.title || inMenu) a.append(label(node.title || node.url));
+
+      // chrome://-Seiten u. ä. lassen sich nicht per normalem Link öffnen
+      if (!/^(https?|file|ftp):/i.test(node.url)) {
+        a.addEventListener('click', (event) => {
+          if (event.ctrlKey || event.metaKey || event.button !== 0) return;
+          event.preventDefault();
+          chrome.tabs.update({ url: node.url });
+        });
+      }
+      return a;
+    }
+
+    const button = document.createElement('button');
+    button.className = 'bm';
+    button.type = 'button';
+    button.title = node.title;
+    button.append(folderIcon(), label(node.title));
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (inMenu) {
+        // Unterordner: Menü-Inhalt durch den Unterordner ersetzen
+        fillMenu(node.id);
+      } else if (menuButton === button) {
+        closeMenu();
+      } else {
+        openMenu(node.id, button);
+      }
+    });
+    return button;
+  }
+
+  // Ordner-Menü unter einem Knopf der Leiste öffnen
+  function openMenu(folderId, button) {
+    closeMenu();
+    menuButton = button;
+    button.classList.add('open');
+    menuEl = document.createElement('div');
+    menuEl.className = 'bm-menu';
+    menuEl.addEventListener('click', (event) => event.stopPropagation());
+    document.body.appendChild(menuEl);
+
+    const rect = button.getBoundingClientRect();
+    menuEl.style.top = `${rect.bottom + 4}px`;
+    menuEl.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - 228))}px`;
+    fillMenu(folderId);
+  }
+
+  // Menü mit dem Inhalt eines Ordners füllen. menuPath merkt sich die
+  // geöffneten Ordner, damit "Zurück" aus Unterordnern herausführt.
+  let menuPath = [];
+
+  function fillMenu(folderId) {
+    menuPath.push(folderId);
+    renderMenu();
+  }
+
+  async function renderMenu() {
+    if (!menuEl) return;
+    const children = await chrome.bookmarks.getChildren(menuPath.at(-1));
+    menuEl.replaceChildren();
+
+    if (menuPath.length > 1) {
+      const back = document.createElement('button');
+      back.className = 'bm';
+      back.type = 'button';
+      back.append(label('‹ Zurück'));
+      back.addEventListener('click', () => {
+        menuPath.pop();
+        renderMenu();
+      });
+      menuEl.appendChild(back);
+    }
+
+    const nodes = children.map((child) => bookmarkNode(child, true)).filter(Boolean);
+    if (nodes.length) {
+      menuEl.append(...nodes);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'bm-empty';
+      empty.textContent = '(leer)';
+      menuEl.appendChild(empty);
+    }
+  }
+
+  function closeMenu() {
+    menuEl?.remove();
+    menuButton?.classList.remove('open');
+    menuEl = null;
+    menuButton = null;
+    menuPath = [];
+  }
+
+  document.addEventListener('click', closeMenu);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeMenu();
+  });
+
+  // Leiste aufbauen: Inhalt der Lesezeichenleiste, rechts "Weitere Lesezeichen"
+  async function renderBookmarks() {
+    closeMenu();
+    const [root] = await chrome.bookmarks.getTree();
+    const [bar, other] = root.children;   // 0 = Lesezeichenleiste, 1 = Weitere
+
+    barEl.replaceChildren();
+    for (const child of bar.children ?? []) {
+      const node = bookmarkNode(child, false);
+      if (node) barEl.appendChild(node);
+    }
+    if (other?.children?.length) {
+      const spacer = document.createElement('span');
+      spacer.className = 'bm-spacer';
+      barEl.append(spacer, bookmarkNode(other, false));
+    }
+    barEl.hidden = barEl.childElementCount === 0;
+    // Das Apps-Menü rückt unter die Leiste, solange sie sichtbar ist
+    document.body.classList.toggle('has-bookmarks', !barEl.hidden);
+  }
+
+  renderBookmarks();
+
+  // Änderungen an den Lesezeichen sofort übernehmen
+  for (const event of ['onCreated', 'onRemoved', 'onChanged', 'onMoved', 'onChildrenReordered']) {
+    chrome.bookmarks[event].addListener(renderBookmarks);
+  }
+}
+</script>
+</body>
+</html>
